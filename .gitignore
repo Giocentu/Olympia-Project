@@ -1,0 +1,35 @@
+# ==========================================
+# .gitignore para Olympia (.NET + Avalonia + MySQL)
+# ==========================================
+
+# Ignorar archivos compilados de .NET
+[Bb]in/
+[Oo]bj/
+
+# Ignorar archivos de configuración local de Visual Studio / VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.vs/
+*.user
+*.suo
+
+# Ignorar archivos temporales y logs del sistema operativo
+.DS_Store
+Thumbs.db
+*.log
+
+# Ignorar archivos de base de datos locales 
+*.mdf
+*.ldf
+*.ndf
+*.sqlite
+*.sqlite3
+
+# ==========================================
+# ¡CRÍTICO PARA LA SEGURIDAD!
+# Ignorar variables de entorno 
+# ==========================================
+.env
+appsettings.Development.json
