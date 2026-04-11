@@ -1,12 +1,13 @@
-CREATE TABLE Rol_usuario
-(
+-- CREATE DATABASE db_olympia;
+-- USE db_olympia;
+
+CREATE TABLE Rol_usuario (
   id_rol INT NOT NULL,
   nombre_rol_usu VARCHAR(50) NOT NULL,
   PRIMARY KEY (id_rol)
 );
 
-CREATE TABLE Usuario
-(
+CREATE TABLE Usuario (
   dni_usuario BIGINT NOT NULL,
   nombre_usuario VARCHAR(50) NOT NULL,
   edad_usuario INT NOT NULL,
@@ -16,34 +17,34 @@ CREATE TABLE Usuario
   PRIMARY KEY (dni_usuario),
   FOREIGN KEY (id_rol) REFERENCES Rol_usuario(id_rol),
   UNIQUE (email),
-  UNIQUE (telefono_usuario)
+  UNIQUE (telefono_usuario),
+  -- Restricción: Edad positiva y razonable para un organizador/asistente
+  CONSTRAINT ck_edad_usuario CHECK (edad_usuario > 0 AND edad_usuario < 120)
 );
 
-CREATE TABLE Categoria
-(
+CREATE TABLE Categoria (
   id_categoria INT NOT NULL,
   nombre_categoria VARCHAR(50) NOT NULL,
   PRIMARY KEY (id_categoria)
 );
 
-CREATE TABLE Formato
-(
+CREATE TABLE Formato (
   id_formato INT NOT NULL,
   nombre_formato VARCHAR(50) NOT NULL,
   PRIMARY KEY (id_formato)
 );
 
-CREATE TABLE Deporte
-(
+CREATE TABLE Deporte (
   id_deporte INT NOT NULL,
   nombre_deporte VARCHAR(50) NOT NULL,
   min_jugadores INT NOT NULL,
   max_jugadores INT NOT NULL,
-  PRIMARY KEY (id_deporte)
+  PRIMARY KEY (id_deporte),
+  -- Restricción: Los límites de jugadores deben ser coherentes
+  CONSTRAINT ck_rango_jugadores CHECK (min_jugadores > 0 AND max_jugadores >= min_jugadores)
 );
 
-CREATE TABLE Torneo
-(
+CREATE TABLE Torneo (
   id_torneo INT NOT NULL,
   nombre_torneo VARCHAR(150) NOT NULL,
   torneo_inicio DATE NOT NULL,
@@ -56,11 +57,13 @@ CREATE TABLE Torneo
   PRIMARY KEY (id_torneo),
   FOREIGN KEY (id_categoria) REFERENCES Categoria(id_categoria),
   FOREIGN KEY (id_formato) REFERENCES Formato(id_formato),
-  FOREIGN KEY (id_deporte) REFERENCES Deporte(id_deporte)
+  FOREIGN KEY (id_deporte) REFERENCES Deporte(id_deporte),
+  -- Restricción: La fecha de fin no puede ser anterior a la de inicio
+  CONSTRAINT ck_fechas_torneo CHECK (torneo_fin >= torneo_inicio),
+  CONSTRAINT ck_max_equipos CHECK (max_equipos > 1)
 );
 
-CREATE TABLE List_colaboradores
-(
+CREATE TABLE List_colaboradores (
   dni_usuario BIGINT NOT NULL,
   id_torneo INT NOT NULL,
   PRIMARY KEY (dni_usuario, id_torneo),
@@ -68,16 +71,14 @@ CREATE TABLE List_colaboradores
   FOREIGN KEY (id_torneo) REFERENCES Torneo(id_torneo)
 );
 
-CREATE TABLE Rol_jugador
-(
+CREATE TABLE Rol_jugador (
   id_rol_jugador INT NOT NULL,
   nombre_rol_jug VARCHAR(50) NOT NULL,
   PRIMARY KEY (id_rol_jugador)
 );
 
-CREATE TABLE Jugador
-(
-  dni_jugador INT NOT NULL,
+CREATE TABLE Jugador (
+  dni_jugador BIGINT NOT NULL,
   nombre_jugador VARCHAR(70) NOT NULL,
   apellido_jugador VARCHAR(70) NOT NULL,
   edad_jugador INT NOT NULL,
@@ -85,11 +86,12 @@ CREATE TABLE Jugador
   id_rol_jugador INT NOT NULL,
   PRIMARY KEY (dni_jugador),
   FOREIGN KEY (id_rol_jugador) REFERENCES Rol_jugador(id_rol_jugador),
-  UNIQUE (telefono_jugador)
+  UNIQUE (telefono_jugador),
+  -- Restricción: Edad mínima para participar
+  CONSTRAINT ck_edad_jugador CHECK (edad_jugador > 0)
 );
 
-CREATE TABLE Equipo
-(
+CREATE TABLE Equipo (
   id_equipo INT NOT NULL,
   nombre_equipo VARCHAR(70) NOT NULL,
   director_equipo VARCHAR(70) NOT NULL,
@@ -102,27 +104,24 @@ CREATE TABLE Equipo
   UNIQUE (nombre_equipo)
 );
 
-CREATE TABLE Plantilla_equipo
-(
-  dni_jugador INT NOT NULL,
+CREATE TABLE Plantilla_equipo (
+  dni_jugador BIGINT NOT NULL,
   id_equipo INT NOT NULL,
   PRIMARY KEY (dni_jugador, id_equipo),
   FOREIGN KEY (dni_jugador) REFERENCES Jugador(dni_jugador),
   FOREIGN KEY (id_equipo) REFERENCES Equipo(id_equipo)
 );
 
-CREATE TABLE Estado_partido
-(
+CREATE TABLE Estado_partido (
   id_estado INT NOT NULL,
   nombre_estado VARCHAR(20) NOT NULL,
   PRIMARY KEY (id_estado)
 );
 
-CREATE TABLE Partido
-(
-  marcador_local INT NOT NULL,
-  marcador_visitante INT NOT NULL,
+CREATE TABLE Partido (
   id_partido INT NOT NULL,
+  marcador_local INT DEFAULT 0 NOT NULL,
+  marcador_visitante INT DEFAULT 0 NOT NULL,
   id_estado INT NOT NULL,
   id_torneo INT NOT NULL,
   id_equipo_local INT NOT NULL,
@@ -131,14 +130,18 @@ CREATE TABLE Partido
   FOREIGN KEY (id_estado) REFERENCES Estado_partido(id_estado),
   FOREIGN KEY (id_torneo) REFERENCES Torneo(id_torneo),
   FOREIGN KEY (id_equipo_local) REFERENCES Equipo(id_equipo),
-  FOREIGN KEY (id_equipo_visitante) REFERENCES Equipo(id_equipo)
+  FOREIGN KEY (id_equipo_visitante) REFERENCES Equipo(id_equipo),
+  CONSTRAINT ck_marcador_local CHECK (marcador_local >= 0),
+  CONSTRAINT ck_marcador_visitante CHECK (marcador_visitante >= 0),
+  -- Un equipo no puede jugar contra sí mismo
+  CONSTRAINT ck_equipos_distintos CHECK (id_equipo_local <> id_equipo_visitante)
 );
 
-CREATE TABLE Torneo_equipo
-(
+CREATE TABLE Torneo_equipo (
   id_torneo INT NOT NULL,
   id_equipo INT NOT NULL,
   PRIMARY KEY (id_torneo, id_equipo),
   FOREIGN KEY (id_torneo) REFERENCES Torneo(id_torneo),
   FOREIGN KEY (id_equipo) REFERENCES Equipo(id_equipo)
 );
+
