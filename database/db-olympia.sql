@@ -45,6 +45,7 @@ CREATE TABLE Estado_partido (
 CREATE TABLE Usuario (
   dni_usuario BIGINT NOT NULL,
   nombre_usuario VARCHAR(50) NOT NULL,
+  apellido_usuario VARCHAR(50) NOT NULL,
   edad_usuario INT NOT NULL,
   email VARCHAR(150) NOT NULL,
   telefono_usuario BIGINT,
