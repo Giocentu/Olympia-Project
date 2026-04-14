@@ -3,7 +3,7 @@ USE db_olympia;
 
 
 CREATE TABLE Rol_usuario (
-  id_rol INT NOT NULL,
+  id_rol INT AUTO_INCREMENT NOT NULL,
   nombre_rol_usu VARCHAR(50) NOT NULL,
   PRIMARY KEY (id_rol)
 );
