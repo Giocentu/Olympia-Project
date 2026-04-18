@@ -7,6 +7,7 @@ import FormTorneo from './formTorneo';
 import FormEquipo from './formEquipo';
 import FormJugador from './formJugador';
 import FormColaborador from './formColaborador';
+import DashboardUsuarios from './DashboardUsuarios'; // Importamos el nuevo Dashboard de usuarios
 
 import './index.css';
 
@@ -24,15 +25,25 @@ function App() {
 
     <div className="p-4">
     <Routes>
+    {/* Ruta base que muestra el dashboard de administrador */}
     <Route path="/" element={<DashboardAdmin />} />
+
+    {/* Agregamos esta ruta para que el botón de "Volver" en Gestión de Usuarios funcione correctamente */}
+    <Route path="/admin-dashboard" element={<DashboardAdmin />} />
+
+    {/* Rutas de los formularios */}
     <Route path="/nuevo-torneo" element={<FormTorneo />} />
     <Route path="/nuevo-equipo" element={<FormEquipo />} />
     <Route path="/nuevo-jugador" element={<FormJugador />} />
     <Route path="/nuevo-colaborador" element={<FormColaborador />} />
+
+    {/* Nueva ruta para el Dashboard de Gestión de Personal/Usuarios */}
+    <Route path="/gestion-usuarios" element={<DashboardUsuarios />} />
     </Routes>
     </div>
     </div>
     </Router>
   );
 }
+
 export default App;
