@@ -1,31 +1,68 @@
 <?php
-// Requerimos la conexión que creamos antes
+// ============================================================================
+// 1. CONFIGURACIÓN DE SEGURIDAD Y CABECERAS (CORS)
+// ============================================================================
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type");
+
+// Permitimos la petición "fantasma" de los navegadores.
+if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') { exit(0); }
+
+// ============================================================================
+// 2. CONEXIÓN A LA BASE DE DATOS
+// ============================================================================
 require 'conexion.php';
 
-// Leemos los datos que nos envía React
-$datos_react = json_decode(file_get_contents("php://input"));
+// ============================================================================
+// 3. RECEPCIÓN DE DATOS DESDE REACT
+// ============================================================================
+$data = json_decode(file_get_contents("php://input"));
 
-if($datos_react) {
-    // IMPORTANTE: Estos nombres deben coincidir con lo que envía React
-    $nombre = $datos_react->nombre_torneo;
-    $inicio = $datos_react->torneo_inicio;
-    $fin = $datos_react->torneo_fin;
-    $id_cat = $datos_react->id_categoria;
-    $id_form = $datos_react->id_formato;
-    $id_dep = $datos_react->id_deporte;
+// Verificamos que al menos nos hayan enviado el nombre del torneo
+if(isset($data->nombre_torneo)) {
 
-    try {
-        // Preparamos la consulta SQL
-        $sql = "INSERT INTO Torneo (id_torneo, nombre_torneo, torneo_inicio, torneo_fin, max_equipos, id_categoria, id_formato, id_deporte)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+    // ============================================================================
+    // 4. CÁLCULO DEL ID MANUAL
+    // ============================================================================
+    // Le pedimos a MySQL: "Busca el número de ID más alto en la tabla Torneo".
+    // COALESCE hace que si la tabla está vacía (devuelve NULL), asuma un 0.
+    // Luego le sumamos 1. Así, si el último era el 5, el nuevo será el 6.
+    $result = $conn->query("SELECT COALESCE(MAX(id_torneo), 0) + 1 AS next_id FROM Torneo");
+    $row = $result->fetch_assoc();
+    $next_id = $row['next_id']; // Aquí guardamos nuestro nuevo ID calculado.
 
-        $stmt = $conexion->prepare($sql);
-        // El primer valor es un ID aleatorio temporal para id_torneo
-        $stmt->execute([rand(1,10000), $nombre, $inicio, $fin, 16, $id_cat, $id_form, $id_dep]);
+    // ============================================================================
+    // 5. PREPARACIÓN DE LA CONSULTA SQL
+    // ============================================================================
+    $stmt = $conn->prepare("INSERT INTO Torneo (id_torneo, nombre_torneo, torneo_inicio, torneo_fin, max_equipos, formato_torneo, categoria_torneo, deporte_torneo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
 
-        echo json_encode(["status" => "success", "mensaje" => "Torneo guardado correctamente"]);
-    } catch(PDOException $e) {
-        echo json_encode(["status" => "error", "mensaje" => $e->getMessage()]);
+    // Vinculamos los datos. Mapa:
+    // i = integer (id_torneo), s = string (nombre), s = string (inicio), s = string (fin)
+    // i = integer (max_equipos), s = string (formato), s = string (categoria), s = string (deporte)
+    $stmt->bind_param("isssisss",
+                      $next_id,
+                      $data->nombre_torneo,
+                      $data->torneo_inicio,
+                      $data->torneo_fin,
+                      $data->max_equipos,
+                      $data->formato_torneo,
+                      $data->categoria_torneo,
+                      $data->deporte_torneo
+    );
+
+    // ============================================================================
+    // 6. EJECUCIÓN Y RESPUESTA
+    // ============================================================================
+    if($stmt->execute()) {
+        echo json_encode(["status" => "success", "mensaje" => "Torneo creado correctamente con el ID: " . $next_id]);
+    } else {
+        echo json_encode(["status" => "error", "mensaje" => "Error de MySQL: " . $stmt->error]);
     }
+
+    $stmt->close();
+} else {
+    echo json_encode(["status" => "error", "mensaje" => "Datos del torneo incompletos."]);
 }
-?>
+
+$conn->close();
