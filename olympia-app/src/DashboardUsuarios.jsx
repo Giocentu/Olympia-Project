@@ -15,7 +15,7 @@ const DashboardUsuarios = () => {
     // Cargar usuarios al entrar a la pantalla
     const cargarUsuarios = async () => {
         try {
-            const resp = await fetch("http://localhost/olympia-backend/obtener_usuarios_roles.php");
+            const resp = await fetch("http://localhost/olympia-backend/obtener_usuario.php");
             const data = await resp.json();
             setUsuarios(data);
         } catch (error) {
@@ -63,8 +63,8 @@ const DashboardUsuarios = () => {
     return (
         <div className="min-h-screen bg-slate-50 p-6">
         {/* Aquí modificamos el enlace para volver al panel de administrador */}
-        <Link to="/admin-dashboard" className="text-blue-600 font-semibold hover:text-blue-800 mb-6 inline-block">
-        &larr; Volver al Panel de Administrador
+        <Link to="/admin" className="text-blue-600 font-semibold hover:text-blue-800 mb-6 inline-block">
+        &larr; Volver al Inicio
         </Link>
 
         <div className="max-w-7xl mx-auto">
@@ -78,7 +78,7 @@ const DashboardUsuarios = () => {
         </div>
         </div>
         {/* Al darle clic, te lleva al formulario de jugador (que ahora es crear usuario base) */}
-        <Link to="/nuevo-jugador">
+        <Link to="/admin/nuevo-jugador">
         <button className="flex items-center space-x-2 bg-green-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-green-700 transition shadow-md">
         <UserPlus className="h-5 w-5" />
         <span>Registrar Nuevo Usuario</span>
@@ -103,7 +103,6 @@ const DashboardUsuarios = () => {
         <div>
         <label className="block text-sm font-semibold text-slate-700 mb-1">Seleccionar Rol</label>
         <select name="rol" value={asignarData.rol} onChange={handleAsignarCambio} className="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-orange-200 bg-white">
-        <option value="1">Administrador</option>
         <option value="2">Organizador Secundario</option>
         <option value="3">Asistente de Campo</option>
         </select>

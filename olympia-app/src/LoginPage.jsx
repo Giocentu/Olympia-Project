@@ -1,16 +1,28 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, HelpCircle, Info, Globe } from 'lucide-react';
-import OlympiaLogo from './assets/olympia_logo.png';
+import OlympiaLogo from './assets/olympia_logo.png'; // <- Asegúrate de tener esta imagen en tu carpeta assets
 
 const LoginPage = () => {
+    const navigate = useNavigate();
     const [formData, setFormData] = useState({
         email: '',
         password: ''
     });
 
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData({ ...formData, [name]: value });
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
-        console.log('Datos:', formData);
+        console.log('Iniciando sesión con:', formData);
+
+        //Guarda la "token" de sesión
+        localStorage.setItem('olympia_token', 'true');
+
+        navigate('/admin');
     };
 
     return (
@@ -47,7 +59,11 @@ const LoginPage = () => {
         <Mail className="h-5 w-5 text-gray-400" />
         </div>
         <input
+        name="email"
+        value={formData.email}
+        onChange={handleChange}
         type="email"
+        required
         className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
         placeholder="tuemail@ejemplo.com"
         />
@@ -61,7 +77,11 @@ const LoginPage = () => {
         <Lock className="h-5 w-5 text-gray-400" />
         </div>
         <input
+        name="password"
+        value={formData.password}
+        onChange={handleChange}
         type="password"
+        required
         className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
         placeholder="••••••••••••"
         />
