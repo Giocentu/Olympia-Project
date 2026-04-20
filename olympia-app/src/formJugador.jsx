@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 const FormJugador = () => {
-    // Estado ajustado para insertarse a la tabla 'Usuario'
+    // 2. Inicializá el hook justo al empezar tu componente
+    const navigate = useNavigate();
+
     const [formData, setFormData] = useState({
         dniJugador: '',
         nombre: '',
@@ -49,9 +51,12 @@ const FormJugador = () => {
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col items-center p-6">
-        <Link to="/" className="self-start mb-6 text-blue-600 flex items-center hover:text-blue-800 transition-colors">
-        <button>&larr; <span className="ml-2 font-semibold">Volver al Inicio</span></button>
-        </Link>
+        <button
+        onClick={() => navigate(-1)}
+        className="self-start mb-6 text-blue-600 flex items-center hover:text-blue-800 transition-colors"
+        >
+        &larr; <span className="ml-2 font-semibold">Volver</span>
+        </button>
 
         <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-3xl border-t-4 border-green-500">
         <h2 className="text-3xl font-bold text-gray-800 mb-2 text-center">Registrar Nuevo Jugador</h2>
