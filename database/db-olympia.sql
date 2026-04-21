@@ -108,5 +108,5 @@ CREATE TABLE Partido
   CONSTRAINT chk_equipos_distintos CHECK (id_equipo_local != id_equipo_visitante),
   CONSTRAINT chk_marcador_local CHECK (marcador_local >= 0),
   CONSTRAINT chk_marcador_visitante CHECK (marcador_visitante >= 0),
-  CONSTRAINT chk_estado_partido CHECK (estado_partido IN ('Pendiente', 'En Curso', 'Finalizado', 'Suspendido'))
+  CONSTRAINT chk_estado_partido CHECK (estado_partido IN ('Programado', 'En curso', 'Finalizado', 'Suspendido'))
 );
