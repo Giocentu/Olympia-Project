@@ -1,42 +1,25 @@
 <?php
-// ============================================================================
-// 1. CONFIGURACIÓN CORS Y TIPO DE RESPUESTA
-// ============================================================================
-header("Access-Control-Allow-Origin: *");
-// Aquí le decimos explícitamente al navegador que lo que vamos a imprimir es un JSON puro.
-header("Content-Type: application/json; charset=UTF-8");
+header("Access-Control-Allow-Origin: *"); // Permite que cualquier origen acceda a este archivo
+header("Content-Type: application/json; charset=UTF-8"); // Indica que la respuesta será en formato JSON
 
-require 'conexion.php';
+require 'conexion.php'; // Importa el archivo de conexión a la base de datos
 
-// ============================================================================
-// 2. PREPARACIÓN Y EJECUCIÓN DE LA CONSULTA
-// ============================================================================
-// Queremos traer los torneos ordenados por su fecha de inicio (los más recientes arriba).
-$sql = "SELECT id_torneo, nombre_torneo, deporte_torneo, categoria_torneo FROM Torneo ORDER BY torneo_inicio DESC";
-$result = $conn->query($sql);
+$sql = "SELECT id_torneo, nombre_torneo, deporte_torneo, categoria_torneo FROM Torneo ORDER BY torneo_inicio DESC"; // Prepara la consulta SQL para obtener los torneos ordenados por fecha más reciente
+$result = $conn->query($sql); // Ejecuta la consulta en la base de datos
 
-// Creamos un array vacío donde iremos guardando los torneos que encontremos.
-$torneos = array();
+$torneos = array(); // Crea un arreglo vacío para almacenar los resultados
 
-// ============================================================================
-// 3. EMPAQUETADO DE RESULTADOS
-// ============================================================================
-// Verificamos si la consulta se ejecutó bien y si encontró al menos 1 torneo (> 0).
-if ($result && $result->num_rows > 0) {
+if ($result && $result->num_rows > 0) { // Si la consulta fue exitosa y hay al menos un torneo encontrado ->
 
-    // fetch_assoc() agarra una fila de la base de datos y la convierte en un diccionario.
-    // El 'while' hace que este proceso se repita fila por fila hasta que no queden más.
-    while($row = $result->fetch_assoc()) {
-        // Metemos cada diccionario (torneo) dentro de nuestro array principal.
-        $torneos[] = $row;
+    while($row = $result->fetch_assoc()) { // Extrae cada fila de resultados como un diccionario iterando una por una
+        $torneos[] = $row; // Añade el diccionario del torneo actual al arreglo general
     }
 
-    // Imprimimos el array convertido a JSON. Esto es lo que lee React.
-    echo json_encode($torneos);
-} else {
-    // Si no hay torneos, devolvemos un array vacío []. Así React no se crashea.
-    echo json_encode([]);
+    echo json_encode($torneos); // Convierte el arreglo a JSON y lo envía como respuesta
+} else { // Si no se encontraron torneos o hubo un error ->
+    echo json_encode([]); // Envía un arreglo JSON vacío para evitar errores en el cliente
 }
 
-$conn->close();
+$conn->close(); // Cierra la conexión con la base de datos
+//RESUMEN: Este archivo consulta la base de datos para obtener una lista de todos los torneos registrados, ordenándolos desde el más reciente hasta el más antiguo, y los devuelve en formato JSON
 ?>

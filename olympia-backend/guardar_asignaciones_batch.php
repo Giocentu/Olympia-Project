@@ -1,50 +1,43 @@
 <?php
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST");
-header("Access-Control-Allow-Headers: Content-Type");
-header("Content-Type: application/json; charset=UTF-8");
+header("Access-Control-Allow-Origin: *"); // CORS
+header("Access-Control-Allow-Methods: POST"); // Solo acepta peticiones de tipo POST
+header("Access-Control-Allow-Headers: Content-Type"); // Permite cabeceras de tipo contenido
+header("Content-Type: application/json; charset=UTF-8");  // Responde en JSON
 
-require 'conexion.php';
+require 'conexion.php'; // Conexión BD
 
-// Leer los datos que manda React
-$datos = json_decode(file_get_contents("php://input"), true);
+$datos = json_decode(file_get_contents("php://input"), true); // Lee datos
 
-if (!isset($datos['id_torneo']) || !isset($datos['equipos'])) {
-    die(json_encode(["status" => "error", "mensaje" => "Datos incompletos"]));
-}
+if (!isset($datos['id_torneo']) || !isset($datos['equipos'])) { die(json_encode(["status" => "error", "mensaje" => "Datos incompletos"])); } // Valida que lleguen torneo y equipos
 
-$id_torneo = $datos['id_torneo'];
-$equipos = $datos['equipos']; // Array con los IDs de los equipos finales
+$id_torneo = $datos['id_torneo']; // Asigna torneo
+$equipos = $datos['equipos']; // Asigna la lista de IDs de equipos
 
-// Iniciamos una transacción de MySQL (si algo falla, se deshace todo)
-$conn->begin_transaction();
+$conn->begin_transaction(); // Inicia transaccion
 
 try {
-    // 1. Borrar todas las asignaciones actuales de este torneo
-    $stmtDelete = $conn->prepare("DELETE FROM Torneo_equipo WHERE id_torneo = ?");
-    $stmtDelete->bind_param("i", $id_torneo);
-    $stmtDelete->execute();
-    $stmtDelete->close();
+    $stmtDelete = $conn->prepare("DELETE FROM Torneo_equipo WHERE id_torneo = ?"); // Borra todos los equipos que estaban antes en este torneo
+    $stmtDelete->bind_param("i", $id_torneo); // Pone el ID
+    $stmtDelete->execute(); // Ejecuta el borrado
+    $stmtDelete->close(); // Cierra borrado
 
-    // 2. Insertar las nuevas asignaciones
-    if (count($equipos) > 0) {
-        $stmtInsert = $conn->prepare("INSERT INTO Torneo_equipo (id_torneo, id_equipo) VALUES (?, ?)");
-        foreach ($equipos as $id_equipo) {
-            $stmtInsert->bind_param("ii", $id_torneo, $id_equipo);
-            $stmtInsert->execute();
+    if (count($equipos) > 0) { // Si hay equipos en la nueva lista ->
+        $stmtInsert = $conn->prepare("INSERT INTO Torneo_equipo (id_torneo, id_equipo) VALUES (?, ?)"); // Prepara el insertador
+        foreach ($equipos as $id_equipo) { // Recorre la lista equipo por equipo
+            $stmtInsert->bind_param("ii", $id_torneo, $id_equipo); // Pone los datos
+            $stmtInsert->execute(); // Lo inserta
         }
-        $stmtInsert->close();
+        $stmtInsert->close(); // Cierra insertador
     }
 
-    // 3. Confirmar los cambios
-    $conn->commit();
-    echo json_encode(["status" => "success", "mensaje" => "Equipos actualizados correctamente"]);
+    $conn->commit(); // Aplica los cambios
+    echo json_encode(["status" => "success", "mensaje" => "Equipos actualizados correctamente"]); // Avisa que todo salió bien
 
-} catch (Exception $e) {
-    // Si hubo un error, deshacemos los cambios
-    $conn->rollback();
-    echo json_encode(["status" => "error", "mensaje" => "Error al guardar en base de datos"]);
+} catch (Exception $e) { // Si algo sale mal ->
+    $conn->rollback(); // Cancela los borrados e inserts para no romper nada
+    echo json_encode(["status" => "error", "mensaje" => "Error al guardar en base de datos"]); // Avisa del error
 }
 
-$conn->close();
+$conn->close(); // Cierra BD
+//RESUMEN: Actualiza la lista completa de equipos de un torneo (borra las inscripciones previas y guarda la nueva lista de golpe)
 ?>
