@@ -1,30 +1,17 @@
 <?php
-// ============================================================================
-// ARCHIVO CENTRAL DE CONEXIÓN A LA BASE DE DATOS
-// ============================================================================
+$host = "localhost"; // Define la dirección del servidor de la base de datos
+$user = "root"; // Define el nombre de usuario para acceder a la base de datos
+$pass = ""; // Define la contraseña de acceso a la base de datos
+$dbname = "db_olympia"; // Define el nombre de la base de datos a utilizar
 
-// 1. CREDENCIALES DE ACCESO
-$host = "localhost"; // Dónde está la base de datos
-$user = "root";      // El usuario por defecto de phpMyAdmin
-$pass = "";          // La contraseña (vacía por defecto en XAMPP)
-$dbname = "db_olympia"; // Nombre exacto de la base de datos
+$conn = new mysqli($host, $user, $pass, $dbname); // Crea una nueva conexión a MySQL utilizando las credenciales
 
-// 2. CREACIÓN DE CONEXIÓN
-// Usamos la clase mysqli de PHP para intentar abrir la puerta a la base de datos.
-$conn = new mysqli($host, $user, $pass, $dbname);
-
-// 3. VERIFICACIÓN DE ERRORES
-// Si 'connect_error' tiene algo, significa que la puerta no se abrió.
-if ($conn->connect_error) {
-    // Matamos el proceso (die) y enviamos un JSON de error para que React sepa qué falló.
+if ($conn->connect_error) { // Si ocurrió un error durante el intento de conexión ->
     die(json_encode([
         "status" => "error",
         "mensaje" => "Fallo la conexión a la Base de Datos: " . $conn->connect_error
-    ]));
+    ])); // Termina la ejecución y muestra un JSON con el detalle del error
 }
 
-// 4. CONFIGURACIÓN DE CARACTERES (Súper importante para el español)
-// Le decimos a MySQL que nos vamos a comunicar en UTF-8.
-// Esto evita que las 'ñ' o los acentos ('á', 'é') se guarden como símbolos raros (ej: 'NiÃ±o').
-$conn->set_charset("utf8");
+$conn->set_charset("utf8"); // Configura la conexión para usar UTF-8 y evitar problemas con acentos y letras eñe
 ?>

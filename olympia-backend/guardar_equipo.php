@@ -1,65 +1,47 @@
 <?php
-// ============================================================================
-// 1. CONFIGURACIÓN DE SEGURIDAD
-// ============================================================================
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type");
+header("Access-Control-Allow-Origin: *"); // CORS
+header("Access-Control-Allow-Methods: POST, OPTIONS"); // CORS Métodos
+header("Access-Control-Allow-Headers: Content-Type"); // CORS Cabeceras
 
-if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') { exit(0); }
+if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') { exit(0); } // Si es una petición de prueba del navegador, la aprueba y corta ahí
 
-require 'conexion.php';
-$data = json_decode(file_get_contents("php://input"));
+require 'conexion.php'; // BD
+$data = json_decode(file_get_contents("php://input")); // Desempaqueta datos
 
-if(isset($data->nombre_equipo)) {
-    // ============================================================================
-    // 2. INICIO DE TRANSACCIÓN
-    // ============================================================================
-    // Como tenemos que insertar en la tabla Equipo y  en Torneo_equipo,
-    // si la primera funciona pero la segunda falla, la transacción deshace la primera
-    // para evitar datos corruptos o "huerfanos" en la base de datos.
-    $conn->begin_transaction();
+if(isset($data->nombre_equipo)) { // Revisa que al menos tenga nombre
+
+    $conn->begin_transaction(); // Inicia protección de datos. Si algo crashea a la mitad, no se guarda basura
 
     try {
-        // A. Calculamos el ID manual para el nuevo equipo.
+        // Busca cuál es el ID más alto de equipo actual, y le suma 1 para usarlo en este equipo nuevo
         $result = $conn->query("SELECT COALESCE(MAX(id_equipo), 0) + 1 AS next_id FROM Equipo");
         $row = $result->fetch_assoc();
         $next_id = $row['next_id'];
 
-        // B. Insertamos los datos principales en la tabla Equipo.
+        // Prepara el guardado en la tabla de Equipos
         $stmt = $conn->prepare("INSERT INTO Equipo (id_equipo, nombre_equipo, descripcion_equipo, categoria_equipo, deporte_equipo) VALUES (?, ?, ?, ?, ?)");
-        $stmt->bind_param("issss", $next_id, $data->nombre_equipo, $data->descripcion_equipo, $data->categoria_equipo, $data->deporte_equipo);
-        $stmt->execute();
+        $stmt->bind_param("issss", $next_id, $data->nombre_equipo, $data->descripcion_equipo, $data->categoria_equipo, $data->deporte_equipo); // 1 int, 4 strings
+        $stmt->execute(); // Ejecuta guardado
 
-        // C. Verificamos si desde React enviaron un ID de Torneo para vincularlo de inmediato.
-        // !empty significa "Si no está vacío..."
+        // Revisa si desde la interfaz nos mandaron también el ID de un torneo para inscribirlo
         if(!empty($data->id_torneo)) {
-            // Insertamos la relación en la tabla intermedia Torneo_equipo.
+            // Lo inscribe inmediatamente relacionando ambos IDs en la tabla puente
             $stmtTorneo = $conn->prepare("INSERT INTO Torneo_equipo (id_torneo, id_equipo) VALUES (?, ?)");
-            // Ambos son enteros (id_torneo, id_equipo), por eso usamos "ii".
             $stmtTorneo->bind_param("ii", $data->id_torneo, $next_id);
             $stmtTorneo->execute();
             $stmtTorneo->close();
         }
 
-        // ============================================================================
-        // 3. CONFIRMACIÓN (COMMIT)
-        // ============================================================================
-        // Si el código llegó hasta aquí sin dar errores, guardamos los cambios definitivamente.
-        $conn->commit();
-        echo json_encode(["status" => "success", "mensaje" => "Equipo registrado exitosamente"]);
+        $conn->commit(); // Confirma todos los cambios en la base de datos de una sola vez
+        echo json_encode(["status" => "success", "mensaje" => "Equipo registrado exitosamente"]); // Devuelve mensaje feliz.
 
-    } catch (Exception $e) {
-        // ============================================================================
-        // 4. REVERSIÓN EN CASO DE ERROR (ROLLBACK)
-        // ============================================================================
-        // Si cualquier execute() falla, caemos aquí. Deshacemos todo lo que intentamos
-        // guardar en este archivo y le avisamos a React del error.
-        $conn->rollback();
-        echo json_encode(["status" => "error", "mensaje" => "Fallo en la transacción: " . $e->getMessage()]);
+    } catch (Exception $e) { // Si algo salió mal en alguna de las inserciones ->
+        $conn->rollback(); // Echa para atrás todo el proceso
+        echo json_encode(["status" => "error", "mensaje" => "Fallo en la transacción: " . $e->getMessage()]); // Manda el error
     }
-} else {
-    echo json_encode(["status" => "error", "mensaje" => "Faltan datos obligatorios del equipo"]);
+} else { // Si no vino el nombre del equipo ->
+    echo json_encode(["status" => "error", "mensaje" => "Faltan datos obligatorios del equipo"]); // Mensaje de rechazo
 }
-$conn->close();
+$conn->close(); // Cierra BD
+// RESUMEN: Guarda un nuevo equipo en el sistema y, si le indicamos, lo inscribe a un torneo en ese mismo instante. Todo mediante una transacción segura
 ?>
