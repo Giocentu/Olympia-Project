@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom';
 
 const FormTorneo = () => {
     const navigate = useNavigate();
-    // Estado ajustado a los campos de la tabla Torneo del nuevo DER
+
     const [formData, setFormData] = useState({
         nombreTorneo: '',
         fechaInicio: '',
         fechaFin: '',
-        maxEquipos: 2, // Mínimo de 2 por restricción chk_max_equipos
+        maxEquipos: 2,
         formatoTorneo: 'Liga',
             categoriaTorneo: 'Libre',
             deporteTorneo: 'Futbol'
@@ -16,23 +16,50 @@ const FormTorneo = () => {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormData((prevData) => ({ ...prevData, [name]: value }));
+
+        // Si el usuario cambia a "Grupos", forzamos el minimo a 4
+        if (name === 'formatoTorneo' && value === 'Grupos') {
+            setFormData((prevData) => ({
+                ...prevData,
+                [name]: value,
+                maxEquipos: Math.max(4, prevData.maxEquipos) // Sube a 4 si era menor
+            }));
+        } else {
+            setFormData((prevData) => ({ ...prevData, [name]: value }));
+        }
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        // Validamos la lógica de fechas antes de enviar (chk_fechas_torneo)
+        // 1. Validación de fechas
         if (new Date(formData.fechaFin) < new Date(formData.fechaInicio)) {
             alert("La fecha de fin no puede ser anterior a la de inicio.");
             return;
+        }
+
+        // 2. Validación preventiva del Formato
+        const formato = formData.formatoTorneo.toLowerCase();
+        const maxEq = parseInt(formData.maxEquipos);
+
+        if (formato === 'grupos' && maxEq < 4) {
+            alert("Para el formato 'Fase de Grupos' la capacidad máxima debe ser de al menos 4 equipos.");
+            return;
+        }
+
+        if (formato === 'eliminatoria') {
+            const esPotenciaDe2 = (maxEq & (maxEq - 1)) === 0;
+            if (!esPotenciaDe2) {
+                const confirmar = window.confirm(`Has configurado una capacidad de ${maxEq} equipos para un torneo Eliminatorio.\n\nAl no ser un número exacto para llaves perfectas (4, 8, 16, 32...), el sistema asignará "Byes" (pases directos) a algunos equipos en la primera ronda.\n\n¿Deseas crear el torneo con esta capacidad?`);
+                if (!confirmar) return;
+            }
         }
 
         const datosParaEnviar = {
             nombre_torneo: formData.nombreTorneo,
             torneo_inicio: formData.fechaInicio,
             torneo_fin: formData.fechaFin,
-            max_equipos: parseInt(formData.maxEquipos),
+            max_equipos: maxEq,
             formato_torneo: formData.formatoTorneo,
                 categoria_torneo: formData.categoriaTorneo,
                 deporte_torneo: formData.deporteTorneo
@@ -48,7 +75,7 @@ const FormTorneo = () => {
             const resultado = await response.json();
 
             if (resultado.status === "success") {
-                alert("¡Éxito! Torneo guardado en la base de datos.");
+                alert("¡Éxito! Torneo guardado correctamente.");
                 setFormData({
                     nombreTorneo: '',
                     fechaInicio: '',
@@ -65,6 +92,9 @@ const FormTorneo = () => {
             alert("No se pudo conectar con el servidor.");
         }
     };
+
+    // Calculamos el mínimo permitido dinámicamente para el input HTML
+    const minEquiposPermitido = formData.formatoTorneo === 'Grupos' ? 4 : 2;
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col items-center p-6">
@@ -119,7 +149,23 @@ const FormTorneo = () => {
         </div>
         <div>
         <label className="block text-sm font-semibold text-gray-700 mb-1">Máx. Equipos</label>
-        <input type="number" name="maxEquipos" min="2" value={formData.maxEquipos} onChange={handleChange} required className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-200 outline-none transition" />
+        <input
+        type="number"
+        name="maxEquipos"
+        min={minEquiposPermitido}
+        value={formData.maxEquipos}
+        onChange={handleChange}
+        required
+        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 outline-none transition ${formData.formatoTorneo === 'Grupos' && formData.maxEquipos < 4 ? 'border-red-500 focus:ring-red-200' : 'border-gray-300 focus:ring-blue-200'}`}
+        />
+
+        {/* Textos de ayuda dinámicos */}
+        {formData.formatoTorneo === 'Eliminatoria' && (
+            <p className="text-xs text-orange-600 mt-1 font-medium">Sugerido: 4, 8, 16 o 32 equipos.</p>
+        )}
+        {formData.formatoTorneo === 'Grupos' && (
+            <p className="text-xs text-blue-600 mt-1 font-medium">Mínimo 4 equipos.</p>
+        )}
         </div>
         </div>
 

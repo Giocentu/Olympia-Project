@@ -97,22 +97,51 @@ const GestorEquipos = () => {
         }
     };
 
-    // --- LÓGICA DE FIXTURE ---
-    const handleGenerarFixture = async () => {
-        if (equiposAsignados.length < 2) {
+    // --- LÓGICA DE VALIDACIÓN POR FORMATO ---
+    const validarGeneracionFixture = (formato, cantidad) => {
+        const formatoStr = formato.toLowerCase();
+
+        if (cantidad < 2) {
             alert("Necesitas al menos 2 equipos para generar un fixture.");
-            return;
+            return false;
         }
 
+        if (formatoStr === 'fase de grupos' && cantidad < 4) {
+            alert("⚠️ Para el formato 'Fase de Grupos' necesitas registrar al menos 4 equipos.");
+            return false;
+        }
+
+        if (formatoStr === 'eliminatoria') {
+            // Verifica si es potencia de 2 usando operaciones de bits
+            const esPotenciaDe2 = (cantidad & (cantidad - 1)) === 0;
+            if (!esPotenciaDe2) {
+                return window.confirm(`Tienes ${cantidad} equipos.\n\nAl no ser un número exacto para llaves perfectas (4, 8, 16...), el sistema adelantará automáticamente a algunos equipos a la siguiente ronda.\n\n¿Deseas continuar?`);
+            }
+        }
+
+        if (formatoStr === 'liga' && cantidad % 2 !== 0) {
+            return window.confirm(`Tienes un número impar de equipos (${cantidad}).\n\nEsto significa que en cada jornada, un equipo quedará libre (sin jugar).\n\n¿Deseas continuar?`);
+        }
+
+        return true;
+    };
+
+    const handleGenerarFixture = async () => {
         if (hayCambios) {
-            alert("Tienes cambios sin guardar en los participantes. Guárdalos primero.");
+            alert("Tienes cambios sin guardar en los participantes. Guárdalos primero antes de generar el fixture.");
             return;
         }
 
-        // Armamos el mensaje de advertencia dependiendo de si ya hay partidos o no
+        const cantidadEquipos = originalAsignados.length;
+
+        // Ejecutamos la nueva validación
+        if (!validarGeneracionFixture(formatoTorneo, cantidadEquipos)) {
+            return; // Si la validación falla o el usuario cancela, detenemos el proceso
+        }
+
         const mensajeConfirmacion = partidos.length > 0
-        ? `¡ATENCIÓN! Ya existe un cronograma. Si generas un nuevo fixture para incluir a los nuevos equipos, SE BORRARÁN los partidos actuales y todos sus resultados.\n\n¿Deseas continuar y generar un nuevo fixture de ${formatoTorneo}?`
-        : `¿Generar fixture para formato ${formatoTorneo}? Esto emparejará a los equipos automáticamente.`;
+        ? `¡ATENCIÓN! Ya existe un cronograma.\n\nSi regeneras el fixture SE BORRARÁN los partidos actuales y todos sus resultados.\n\n¿Deseas generar un NUEVO torneo en formato ${formatoTorneo}?`
+        : `¿Generar fixture inicial para formato ${formatoTorneo}?`;
 
         if (window.confirm(mensajeConfirmacion)) {
             setGenerandoFixture(true);
@@ -138,6 +167,7 @@ const GestorEquipos = () => {
         }
     };
 
+    // --- RENDERIZADO LIGA (ROUND ROBIN) ---
     const renderLiga = () => {
         const jornadas = partidos.reduce((acc, partido) => {
             const jornada = partido.fase_jornada || 'Jornada N/A';
@@ -150,27 +180,103 @@ const GestorEquipos = () => {
             <div className="space-y-8">
             {Object.keys(jornadas).map((jornada, index) => (
                 <div key={index} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                <div className="bg-slate-50 px-6 py-3 border-b border-gray-200 flex justify-between items-center">
+                <div className="bg-slate-50 px-6 py-3 border-b border-gray-200">
                 <h4 className="font-bold text-slate-800 text-lg flex items-center gap-2">
                 <Layers className="h-5 w-5 text-blue-500" />
                 {jornada}
                 </h4>
                 </div>
                 <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {jornadas[jornada].map(partido => (
-                    <div key={partido.id_partido} className="border border-gray-100 rounded-lg p-3 hover:border-blue-200 transition-colors bg-white">
-                    <div className="flex justify-between text-xs text-gray-400 mb-2">
-                    <span>ID: {partido.id_partido}</span>
-                    <span className={`font-semibold ${partido.estado_partido === 'Pendiente' ? 'text-orange-500' : 'text-green-600'}`}>{partido.estado_partido}</span>
+                {jornadas[jornada].map(partido => renderMatchCard(partido))}
+                </div>
+                </div>
+            ))}
+            </div>
+        );
+    };
+
+    // --- RENDERIZADO FASE DE GRUPOS ---
+    const renderFaseGrupos = () => {
+        // Agrupa doble: Por Grupo (Ej: Grupo A) y por Fecha (Ej: Fecha 1)
+        const gruposEstructura = partidos.reduce((acc, partido) => {
+            const faseCompleta = partido.fase_jornada || 'Grupo Indefinido';
+            const partes = faseCompleta.split(' - ');
+            const grupo = partes[0] || 'Grupos';
+            const fecha = partes[1] || 'Fecha Única';
+
+            if (!acc[grupo]) acc[grupo] = {};
+            if (!acc[grupo][fecha]) acc[grupo][fecha] = [];
+            acc[grupo][fecha].push(partido);
+            return acc;
+        }, {});
+
+        return (
+            <div className="space-y-10">
+            {Object.entries(gruposEstructura).map(([nombreGrupo, fechas]) => (
+                <div key={nombreGrupo} className="bg-white border-2 border-indigo-100 rounded-xl shadow-sm overflow-hidden">
+                <div className="bg-indigo-600 px-6 py-3">
+                <h4 className="font-bold text-white text-lg flex items-center gap-2">
+                <Layers className="h-5 w-5 text-indigo-200" />
+                {nombreGrupo}
+                </h4>
+                </div>
+                <div className="p-5 space-y-6 bg-slate-50/50">
+                {Object.entries(fechas).map(([nombreFecha, partidosFecha]) => (
+                    <div key={nombreFecha}>
+                    <h5 className="font-bold text-slate-500 mb-3 text-sm uppercase tracking-wider border-b border-slate-200 pb-2">
+                    {nombreFecha}
+                    </h5>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {partidosFecha.map(partido => renderMatchCard(partido))}
                     </div>
-                    <div className="flex flex-col gap-2">
-                    <div className="flex justify-between items-center bg-slate-50 p-2 rounded">
-                    <span className="font-semibold text-gray-800 truncate" title={partido.local}>{partido.local}</span>
-                    <span className="text-gray-400 font-mono">-</span>
                     </div>
-                    <div className="flex justify-between items-center bg-slate-50 p-2 rounded">
-                    <span className="font-semibold text-gray-800 truncate" title={partido.visitante}>{partido.visitante}</span>
-                    <span className="text-gray-400 font-mono">-</span>
+                ))}
+                </div>
+                </div>
+            ))}
+            </div>
+        );
+    };
+
+    // --- RENDERIZADO ELIMINATORIA (BRACKET) ---
+    const renderEliminatoria = () => {
+        const fases = partidos.reduce((acc, partido) => {
+            const fase = partido.fase_jornada || 'Fase Única';
+            if (!acc[fase]) acc[fase] = [];
+            acc[fase].push(partido);
+            return acc;
+        }, {});
+
+        return (
+            <div className="space-y-8">
+            {Object.entries(fases).map(([fase, partidosFase]) => (
+                <div key={fase} className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                <div className="bg-slate-800 px-6 py-4">
+                <h4 className="font-bold text-white text-lg flex items-center gap-2">
+                <Trophy className="h-5 w-5 text-yellow-400" />
+                {fase}
+                <span className="ml-auto text-xs font-normal text-slate-400 bg-slate-700 px-3 py-1 rounded-full">
+                {partidosFase.length} Partido{partidosFase.length !== 1 ? 's' : ''}
+                </span>
+                </h4>
+                </div>
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 bg-slate-50 relative">
+                {partidosFase.map((partido) => (
+                    <div key={partido.id_partido} className="flex flex-col justify-center relative">
+                    <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
+                    <div className="bg-slate-100 py-2 px-3 text-xs font-semibold text-slate-500 flex justify-between border-b border-slate-200">
+                    <span>Llave #{partido.id_partido}</span>
+                    <span className={`px-2 py-0.5 rounded-full ${partido.estado_partido === 'Programado' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
+                    {partido.estado_partido}
+                    </span>
+                    </div>
+                    <div className="flex flex-col">
+                    <div className="p-4 border-b border-slate-100 hover:bg-slate-50 transition-colors flex justify-between items-center">
+                    <span className="font-bold text-gray-800">{partido.local}</span>
+                    </div>
+                    <div className="p-4 hover:bg-slate-50 transition-colors flex justify-between items-center">
+                    <span className="font-bold text-gray-800">{partido.visitante}</span>
+                    </div>
                     </div>
                     </div>
                     </div>
@@ -182,34 +288,33 @@ const GestorEquipos = () => {
         );
     };
 
-    const renderEliminatoria = () => {
-        return (
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="bg-slate-50 px-6 py-3 border-b border-gray-200">
-            <h4 className="font-bold text-slate-800 text-lg">Llaves Iniciales</h4>
-            </div>
-            <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
-            {partidos.map((partido, index) => (
-                <div key={partido.id_partido} className="flex flex-col justify-center relative">
-                <div className="border-2 border-slate-200 rounded-lg overflow-hidden bg-white z-10 w-full sm:w-80">
-                <div className="bg-slate-100 py-1 px-3 text-xs font-semibold text-slate-500 flex justify-between border-b border-slate-200">
-                <span>{partido.fase_jornada || 'Fase 1'}</span>
-                <span className="text-blue-600">{partido.estado_partido}</span>
-                </div>
-                <div className="flex flex-col">
-                <div className="p-3 border-b border-slate-100 hover:bg-slate-50 transition-colors flex justify-between">
-                <span className="font-bold text-gray-800">{partido.local}</span>
-                </div>
-                <div className="p-3 hover:bg-slate-50 transition-colors flex justify-between">
-                <span className="font-bold text-gray-800">{partido.visitante}</span>
-                </div>
-                </div>
-                </div>
-                </div>
-            ))}
-            </div>
-            </div>
-        );
+    // Componente reutilizable para tarjetas pequeñas
+    const renderMatchCard = (partido) => (
+        <div key={partido.id_partido} className="border border-gray-200 rounded-lg p-3 hover:border-blue-400 transition-colors bg-white shadow-sm">
+        <div className="flex justify-between text-xs text-gray-400 mb-2">
+        <span>Partido #{partido.id_partido}</span>
+        <span className={`font-semibold ${partido.estado_partido === 'Programado' ? 'text-orange-500' : 'text-green-600'}`}>
+        {partido.estado_partido}
+        </span>
+        </div>
+        <div className="flex flex-col gap-2">
+        <div className="flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-100">
+        <span className="font-semibold text-gray-800 truncate" title={partido.local}>{partido.local}</span>
+        <span className="text-gray-400 font-mono">-</span>
+        </div>
+        <div className="flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-100">
+        <span className="font-semibold text-gray-800 truncate" title={partido.visitante}>{partido.visitante}</span>
+        <span className="text-gray-400 font-mono">-</span>
+        </div>
+        </div>
+        </div>
+    );
+
+    const renderContenidoFixture = () => {
+        const formatoStr = formatoTorneo.toLowerCase();
+        if (formatoStr === 'fase de grupos') return renderFaseGrupos();
+        if (formatoStr === 'eliminatoria') return renderEliminatoria();
+        return renderLiga(); // Fallback por defecto a Liga
     };
 
     return (
@@ -360,8 +465,6 @@ const GestorEquipos = () => {
                     <div>
                     <div className="flex justify-between items-center mb-6">
                     <h3 className="text-xl font-bold text-gray-800">Cronograma Oficial</h3>
-
-                    {/* AQUI ESTA EL NUEVO BOTON PARA REGENERAR FIXTURE */}
                     <button
                     onClick={handleGenerarFixture}
                     disabled={generandoFixture}
@@ -372,10 +475,9 @@ const GestorEquipos = () => {
                     </button>
                     </div>
 
-                    {formatoTorneo.toLowerCase() === 'liga'
-                        ? renderLiga()
-                        : renderEliminatoria()
-                    }
+                    {/* Renderizador dinámico según el formato */}
+                    {renderContenidoFixture()}
+
                     </div>
                 )}
                 </div>
