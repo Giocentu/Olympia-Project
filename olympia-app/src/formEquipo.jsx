@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Users, ShieldAlert, Sparkles } from 'lucide-react';
 
 const FormEquipo = () => {
     const navigate = useNavigate();
-
-    // 2. Agregamos el estado de 'torneos' que faltaba
+    const userEmail = localStorage.getItem('olympia_user_email') || 'capitan@olympia.com';
     const [torneos, setTorneos] = useState([]);
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
 
     const [formData, setFormData] = useState({
         nombreEquipo: '',
@@ -24,20 +26,42 @@ const FormEquipo = () => {
                     setTorneos(data);
                 }
             } catch (error) {
-                console.error("Error cargando torneos:", error);
+                console.error("Error cargando torneos del backend, usando mock...", error);
+                // Si falla el backend, cargamos del localStorage si existen torneos
+                const mockTorneos = [
+                    { id_torneo: 'torneo_1', nombre_torneo: 'Superliga de Fútbol Amateur', deporte_torneo: 'Futbol', categoria_torneo: 'Libre' },
+                    { id_torneo: 'torneo_2', nombre_torneo: 'Torneo de Básquet 3x3', deporte_torneo: 'Basquet', categoria_torneo: 'Libre' },
+                    { id_torneo: 'torneo_3', nombre_torneo: 'Liga Universitaria de Vóley', deporte_torneo: 'Voley', categoria_torneo: 'Libre' },
+                    { id_torneo: 'torneo_4', nombre_torneo: 'Torneo Ping-Pong Dobles', deporte_torneo: 'Ping-Pong', categoria_torneo: 'Libre' }
+                ];
+                setTorneos(mockTorneos);
             }
         };
         cargarTorneos();
     }, []);
 
     const handleChange = (e) => {
-        const { name, value } = e.target;
+        const { name, value } = formData.deporteEquipo !== undefined && name === 'deporteEquipo' 
+            ? { name, value: e.target.value } 
+            : { name: e.target.name, value: e.target.value };
+        
         setFormData((prevData) => ({ ...prevData, [name]: value }));
+        setError('');
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setError('');
+        setSuccess('');
+
+        if (!formData.nombreEquipo.trim() || !formData.descripcionEquipo.trim()) {
+            setError('Todos los campos obligatorios deben ser completados');
+            return;
+        }
+
+        const newId = 'eq_' + Date.now();
         const datosEnvio = {
+            id: newId,
             nombre_equipo: formData.nombreEquipo,
             descripcion_equipo: formData.descripcionEquipo,
             categoria_equipo: formData.categoriaEquipo,
@@ -45,7 +69,46 @@ const FormEquipo = () => {
             id_torneo: formData.torneoAsignado
         };
 
+        let savedLocally = false;
         try {
+            // Guardar localmente siempre para garantizar la persistencia del prototipo
+            const storedEquipos = localStorage.getItem('olympia_equipos');
+            const listaEquipos = storedEquipos ? JSON.parse(storedEquipos) : [];
+            
+            const nuevoEquipoLocal = {
+                id: newId,
+                nombre: formData.nombreEquipo,
+                descripcion: formData.descripcionEquipo,
+                categoria: formData.categoriaEquipo,
+                deporte: formData.deporteEquipo,
+                capitanEmail: userEmail,
+                jugadores: []
+            };
+
+            listaEquipos.push(nuevoEquipoLocal);
+            localStorage.setItem('olympia_equipos', JSON.stringify(listaEquipos));
+            savedLocally = true;
+
+            // Si seleccionó un torneo al que inscribirse directamente, crear una solicitud de inscripción pendiente
+            if (formData.torneoAsignado) {
+                const tor = torneos.find(t => t.id_torneo === formData.torneoAsignado);
+                const storedSolicitudes = localStorage.getItem('olympia_solicitudes') || '[]';
+                const listaSolicitudes = JSON.parse(storedSolicitudes);
+                
+                listaSolicitudes.push({
+                    id: 'sol_' + Date.now(),
+                    idTorneo: formData.torneoAsignado,
+                    nombreTorneo: tor ? tor.nombre_torneo : 'Torneo Vinculado',
+                    idEquipo: newId,
+                    nombreEquipo: formData.nombreEquipo,
+                    deporte: formData.deporteEquipo,
+                    estado: 'Pendiente',
+                    fechaSolicitud: new Date().toISOString().split('T')[0]
+                });
+                localStorage.setItem('olympia_solicitudes', JSON.stringify(listaSolicitudes));
+            }
+
+            // Llamar al backend
             const response = await fetch("http://localhost/olympia-backend/guardar_equipo.php", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -53,90 +116,143 @@ const FormEquipo = () => {
             });
 
             const resultado = await response.json();
-
-            if (resultado.status === "success") {
-                alert("¡Equipo registrado con éxito!");
-                setFormData({
-                    nombreEquipo: '',
-                    descripcionEquipo: '',
-                    categoriaEquipo: 'Libre',
-                    deporteEquipo: 'Futbol',
-                    torneoAsignado: ''
-                });
-            } else {
-                alert("Error: " + resultado.mensaje);
+            if (resultado.status !== "success") {
+                console.warn("El backend devolvió un error, pero guardamos en localstorage para prototipo:", resultado.mensaje);
             }
-        } catch (error) {
-            alert("No se pudo conectar con el servidor.");
+        } catch (err) {
+            console.error("No se pudo conectar con el backend. Guardado en modo prototipo local.", err);
+        }
+
+        if (savedLocally) {
+            setSuccess('¡Equipo registrado con éxito! Redirigiendo a gestión de plantilla...');
+            setTimeout(() => {
+                navigate(`/capitan/plantilla/${newId}`);
+            }, 1200);
+        } else {
+            setError('Error al registrar el equipo.');
         }
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col items-center p-6">
+        <div className="space-y-6 animate-fadeIn max-w-2xl mx-auto w-full">
+            <button
+                onClick={() => navigate(-1)}
+                className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition-colors uppercase tracking-wider mb-2"
+            >
+                <ArrowLeft className="h-4 w-4" />
+                Volver
+            </button>
 
-        <button
-        onClick={() => navigate(-1)}
-        className="self-start mb-6 text-blue-600 flex items-center hover:text-blue-800 transition-colors"
-        >
-        &larr; <span className="ml-2 font-semibold">Volver</span>
-        </button>
+            <div className="bg-slate-900/60 border border-slate-800 p-8 rounded-3xl backdrop-blur-md relative overflow-hidden">
+                <div className="absolute top-0 right-0 bg-blue-600/10 p-6 rounded-bl-full text-blue-500/20">
+                    <Users className="h-16 w-16" />
+                </div>
 
-        <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-2xl border-t-4 border-purple-500">
-        <h2 className="text-3xl font-bold text-gray-800 mb-2 text-center">Registrar Nuevo Equipo</h2>
-        <p className="text-gray-600 mb-8 text-center">Registra los datos básicos del equipo.</p>
+                <div className="mb-6 relative z-10">
+                    <h2 className="text-2xl font-black text-white uppercase tracking-tight">Registrar Nuevo Equipo</h2>
+                    <p className="text-xs text-slate-400 mt-1">Completa los datos básicos para inscribir tus jugadores luego.</p>
+                </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-        <label className="block text-sm font-bold text-gray-700 mb-1">Vincular a un Torneo (Opcional)</label>
-        <select name="torneoAsignado" value={formData.torneoAsignado} onChange={handleChange} className="w-full p-2 border rounded bg-white">
-        <option value="">No asignar por ahora</option>
-        {torneos.map((t) => (
-            <option key={t.id_torneo} value={t.id_torneo}>
-            {t.nombre_torneo} ({t.deporte_torneo} - {t.categoria_torneo})
-            </option>
-        ))}
-        </select>
-        </div>
+                {error && (
+                    <div className="bg-red-500/10 border border-red-500/30 text-red-200 px-4 py-3 rounded-xl text-xs mb-6 flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                        {error}
+                    </div>
+                )}
 
-        <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Nombre del Equipo</label>
-        <input type="text" name="nombreEquipo" value={formData.nombreEquipo} onChange={handleChange} required placeholder="Ej. Los Halcones FC" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-200 outline-none transition" />
-        </div>
+                {success && (
+                    <div className="bg-green-500/10 border border-green-500/30 text-green-200 px-4 py-3 rounded-xl text-xs mb-6 flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                        {success}
+                    </div>
+                )}
 
-        <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Descripción corta</label>
-        <input type="text" name="descripcionEquipo" value={formData.descripcionEquipo} onChange={handleChange} required placeholder="Ciudad o lema del equipo" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-200 outline-none transition" />
-        </div>
+                <form onSubmit={handleSubmit} className="space-y-5 relative z-10">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Vincular a un Torneo Disponible (Opcional)</label>
+                        <select 
+                            name="torneoAsignado" 
+                            value={formData.torneoAsignado} 
+                            onChange={handleChange} 
+                            className="block w-full px-4 py-3 bg-slate-950/60 border border-slate-850 rounded-xl focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none text-slate-200 text-sm transition-colors cursor-pointer"
+                        >
+                            <option value="">No vincular por ahora (Equipo Independiente)</option>
+                            {torneos.map((t) => (
+                                <option key={t.id_torneo} value={t.id_torneo}>
+                                    {t.nombre_torneo} ({t.deporte_torneo === 'Futbol' ? 'Fútbol' : t.deporte_torneo} - {t.categoria_torneo})
+                                </option>
+                            ))}
+                        </select>
+                    </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Categoría</label>
-        <select name="categoriaEquipo" value={formData.categoriaEquipo} onChange={handleChange} required className="w-full p-2 border rounded bg-white outline-none">
-        <option value="Sub-18">Sub-18</option>
-        <option value="Libre">Libre</option>
-        <option value="Veteranos">Veteranos</option>
-        <option value="Junior">Junior</option>
-        </select>
-        </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Nombre del Equipo</label>
+                        <input 
+                            type="text" 
+                            name="nombreEquipo" 
+                            value={formData.nombreEquipo} 
+                            onChange={handleChange} 
+                            required 
+                            placeholder="Ej. Los Halcones FC" 
+                            className="block w-full px-4 py-3 bg-slate-950/60 border border-slate-850 rounded-xl focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none text-slate-100 text-sm transition-colors"
+                        />
+                    </div>
 
-        <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Deporte</label>
-        <select name="deporteEquipo" value={formData.deporteEquipo} onChange={handleChange} required className="w-full p-2 border rounded bg-white outline-none">
-        <option value="Futbol">Fútbol</option>
-        <option value="Basquet">Básquet</option>
-        <option value="Voley">Vóley</option>
-        <option value="Ping-Pong">Ping-Pong</option>
-        </select>
-        </div>
-        </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Descripción corta / Ciudad</label>
+                        <input 
+                            type="text" 
+                            name="descripcionEquipo" 
+                            value={formData.descripcionEquipo} 
+                            onChange={handleChange} 
+                            required 
+                            placeholder="Ej. Buenos Aires - Lema del equipo" 
+                            className="block w-full px-4 py-3 bg-slate-950/60 border border-slate-850 rounded-xl focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none text-slate-100 text-sm transition-colors"
+                        />
+                    </div>
 
-        <div className="flex justify-center pt-4">
-        <button type="submit" className="w-full md:w-auto bg-purple-600 text-white font-bold py-3 px-12 rounded-lg hover:bg-purple-700 shadow-md">
-        Registrar Equipo
-        </button>
-        </div>
-        </form>
-        </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Categoría</label>
+                            <select 
+                                name="categoriaEquipo" 
+                                value={formData.categoriaEquipo} 
+                                onChange={handleChange} 
+                                required 
+                                className="block w-full px-4 py-3 bg-slate-950/60 border border-slate-850 rounded-xl focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none text-slate-200 text-sm transition-colors cursor-pointer"
+                            >
+                                <option value="Sub-18">Sub-18</option>
+                                <option value="Libre">Libre</option>
+                                <option value="Veteranos">Veteranos</option>
+                                <option value="Junior">Junior</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Deporte</label>
+                            <select 
+                                name="deporteEquipo" 
+                                value={formData.deporteEquipo} 
+                                onChange={handleChange} 
+                                required 
+                                className="block w-full px-4 py-3 bg-slate-950/60 border border-slate-850 rounded-xl focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none text-slate-200 text-sm transition-colors cursor-pointer"
+                            >
+                                <option value="Futbol">Fútbol</option>
+                                <option value="Basquet">Básquet</option>
+                                <option value="Voley">Vóley</option>
+                                <option value="Ping-Pong">Ping-Pong</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button 
+                        type="submit" 
+                        className="w-full py-3.5 px-4 rounded-xl shadow-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm tracking-wide transition-all shadow-blue-600/20 active:scale-[0.98] mt-4"
+                    >
+                        CREAR EQUIPO Y ABRIR PLANTILLA
+                    </button>
+                </form>
+            </div>
         </div>
     );
 };
