@@ -185,51 +185,81 @@ class UsuarioController {
             $email = $input['email'] ?? '';
             $telefono = $input['telefono_usuario'] ?? $input['telefono'] ?? null;
 
-            if (!$dni || !$nombre || !$email) {
-                throw new Exception("Datos del colaborador incompletos.");
+            if (!$dni) {
+                throw new Exception("El DNI del colaborador es requerido.");
             }
 
             $db = Database::getConnection();
             $db->beginTransaction();
 
             try {
-                $usuario = new Usuario(
-                    (int)$dni,
-                    $nombre,
-                    $apellido,
-                    $fechaNac,
-                    $email,
-                    $telefono !== null ? (int)$telefono : null
-                );
+                // Verificar si el usuario ya existe en el sistema
+                $existingUsuario = $this->usuarioRepo->find((int)$dni);
 
-                // Validar email del dominio
-                $usuario->validarEmail();
+                if ($existingUsuario) {
+                    $usuario = $existingUsuario;
+                    if (!empty($nombre)) $usuario->nombre_usuario = $nombre;
+                    if (!empty($apellido)) $usuario->apellido_usuario = $apellido;
+                    if (!empty($email)) $usuario->email = $email;
+                    if (!empty($fechaNac) && $fechaNac !== '2000-01-01') $usuario->fecha_nac = $fechaNac;
+                    if ($telefono !== null) $usuario->telefono_usuario = (int)$telefono;
 
-                // Guardar usuario
-                if (!$this->usuarioRepo->save($usuario)) {
-                    throw new Exception("Error al insertar al usuario.");
+                    if (!$this->usuarioRepo->save($usuario)) {
+                        throw new Exception("Error al actualizar al usuario.");
+                    }
+                } else {
+                    if (!$nombre || !$email) {
+                        throw new Exception("El usuario no existe y los datos de creación están incompletos (nombre y email son obligatorios).");
+                    }
+
+                    $usuario = new Usuario(
+                        (int)$dni,
+                        $nombre,
+                        $apellido,
+                        $fechaNac,
+                        $email,
+                        $telefono !== null ? (int)$telefono : null
+                    );
+
+                    // Validar email del dominio
+                    $usuario->validarEmail();
+
+                    // Guardar usuario
+                    if (!$this->usuarioRepo->save($usuario)) {
+                        throw new Exception("Error al insertar al usuario.");
+                    }
                 }
 
-                // Obtener ID del rol (Asistente = 3, Organizador = 2)
+                // Obtener ID del rol (Asistente = 3, Organizador = 2, Capitán/Revocar = 4)
                 $rolNombre = strtolower($input['rol'] ?? 'asistente');
-                $idRol = ($rolNombre === 'organizador' || $rolNombre === '2') ? 2 : 3;
+                
+                if ($rolNombre === '4' || $rolNombre === 'capitán' || $rolNombre === 'capitan') {
+                    // Si el rol es Capitán/4, removemos al usuario de List_colaboradores (revocar privilegios de colaborador)
+                    $stmtDel = $db->prepare("
+                        DELETE FROM List_colaboradores 
+                        WHERE dni_usuario = :dni
+                    ");
+                    $stmtDel->execute(['dni' => $usuario->dni_usuario]);
+                } else {
+                    $idRol = ($rolNombre === 'organizador' || $rolNombre === '2') ? 2 : 3;
 
-                // Si se especifica torneo, agregarlo como colaborador.
-                // Si no, podemos asociarlo a un torneo ficticio o por defecto si es requerido, o simplemente omitir.
-                // Generalmente se añade a List_colaboradores para un torneo.
-                $idTorneo = !empty($input['id_torneo']) ? (int)$input['id_torneo'] : 1; // Fallback a Torneo 1 si no se especifica
+                    // Si se especifica torneo, agregarlo como colaborador.
+                    // Si no, podemos asociarlo a un torneo ficticio o por defecto si es requerido, o simplemente omitir.
+                    // Generalmente se añade a List_colaboradores para un torneo.
+                    $idTorneo = !empty($input['id_torneo']) ? (int)$input['id_torneo'] : 1; // Fallback a Torneo 1 si no se especifica
 
-                $stmtCol = $db->prepare("
-                    INSERT INTO List_colaboradores (fecha_registro, dni_usuario, id_torneo, id_rol)
-                    VALUES (:fecha, :dni, :id_torneo, :id_rol)
-                    ON DUPLICATE KEY UPDATE fecha_registro = :fecha, id_rol = :id_rol
-                ");
-                $stmtCol->execute([
-                    'fecha' => date('Y-m-d'),
-                    'dni' => $usuario->dni_usuario,
-                    'id_torneo' => $idTorneo,
-                    'id_rol' => $idRol
-                ]);
+                    $stmtCol = $db->prepare("
+                        INSERT INTO List_colaboradores (fecha_registro, dni_usuario, id_torneo, id_rol)
+                        VALUES (:fecha, :dni, :id_torneo, :id_rol)
+                        ON DUPLICATE KEY UPDATE fecha_registro = :fecha, id_rol = :id_rol
+                    ");
+                    $stmtCol->execute([
+                        'fecha' => date('Y-m-d'),
+                        'dni' => $usuario->dni_usuario,
+                        'id_torneo' => $idTorneo,
+                        'id_rol' => $idRol
+                    ]);
+                }
 
                 $db->commit();
                 echo json_encode([

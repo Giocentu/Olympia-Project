@@ -16,6 +16,7 @@ const DashboardUsuarios = () => {
 
     const cargarUsuarios = async () => {
         let listaUsuarios = [];
+        let loadedFromBackend = false;
         
         // 1. Intentar cargar de backend
         try {
@@ -23,24 +24,29 @@ const DashboardUsuarios = () => {
             const data = await resp.json();
             if (Array.isArray(data)) {
                 listaUsuarios = data;
+                loadedFromBackend = true;
+                // Sincronizar backend con localStorage para fallbacks
+                localStorage.setItem('olympia_usuarios', JSON.stringify(data));
             }
         } catch (error) {
             console.log("Backend offline o error al obtener usuarios. Usando locales.");
         }
 
-        // 2. Sincronizar o cargar de localStorage
-        const storedUsuarios = localStorage.getItem('olympia_usuarios');
-        if (storedUsuarios) {
-            listaUsuarios = JSON.parse(storedUsuarios);
-        } else {
-            // Inicializar base de datos de usuarios si no existe
-            listaUsuarios = [
-                { dni_usuario: '11111111', nombre_usuario: 'Administrador', apellido_usuario: 'Principal', email: 'admin@olympia.com', roles_asignados: 'SuperAdmin' },
-                { dni_usuario: '22222222', nombre_usuario: 'Marcos', apellido_usuario: 'Gómez', email: 'organizador@olympia.com', roles_asignados: 'Organizador' },
-                { dni_usuario: '33333333', nombre_usuario: 'Lucía', apellido_usuario: 'Fernández', email: 'capitan@olympia.com', roles_asignados: 'Capitán' },
-                { dni_usuario: '44444444', nombre_usuario: 'Esteban', apellido_usuario: 'Paz', email: 'esteban@olympia.com', roles_asignados: 'Capitán' }
-            ];
-            localStorage.setItem('olympia_usuarios', JSON.stringify(listaUsuarios));
+        // 2. Sincronizar o cargar de localStorage (sólo si no se pudo cargar del backend)
+        if (!loadedFromBackend) {
+            const storedUsuarios = localStorage.getItem('olympia_usuarios');
+            if (storedUsuarios) {
+                listaUsuarios = JSON.parse(storedUsuarios);
+            } else {
+                // Inicializar base de datos de usuarios si no existe
+                listaUsuarios = [
+                    { dni_usuario: '11111111', nombre_usuario: 'Administrador', apellido_usuario: 'Principal', email: 'admin@olympia.com', roles_asignados: 'SuperAdmin' },
+                    { dni_usuario: '22222222', nombre_usuario: 'Marcos', apellido_usuario: 'Gómez', email: 'organizador@olympia.com', roles_asignados: 'Organizador' },
+                    { dni_usuario: '33333333', nombre_usuario: 'Lucía', apellido_usuario: 'Fernández', email: 'capitan@olympia.com', roles_asignados: 'Capitán' },
+                    { dni_usuario: '44444444', nombre_usuario: 'Esteban', apellido_usuario: 'Paz', email: 'esteban@olympia.com', roles_asignados: 'Capitán' }
+                ];
+                localStorage.setItem('olympia_usuarios', JSON.stringify(listaUsuarios));
+            }
         }
 
         setUsuarios(listaUsuarios);
@@ -58,6 +64,8 @@ const DashboardUsuarios = () => {
 
     // Cambiar rol de usuario por DNI
     const cambiarRol = (dni, nuevoRolString) => {
+        const userObj = usuarios.find(u => u.dni_usuario.toString() === dni.toString());
+
         const nuevosUsuarios = usuarios.map(u => {
             if (u.dni_usuario.toString() === dni.toString()) {
                 return { ...u, roles_asignados: nuevoRolString };
@@ -68,16 +76,39 @@ const DashboardUsuarios = () => {
         localStorage.setItem('olympia_usuarios', JSON.stringify(nuevosUsuarios));
         setUsuarios(nuevosUsuarios);
         setSuccess(`Rol actualizado con éxito para el usuario DNI: ${dni}`);
+        setError('');
+
+        const payload = {
+            dni: dni,
+            rol: nuevoRolString === 'Organizador' ? '2' : nuevoRolString === 'Asistente' ? '3' : '4'
+        };
+
+        if (userObj) {
+            payload.nombre = userObj.nombre_usuario;
+            payload.apellido = userObj.apellido_usuario;
+            payload.email = userObj.email;
+            payload.fechaNac = userObj.fecha_nac;
+            payload.telefono = userObj.telefono_usuario;
+        }
 
         // Intentar actualizar también en el backend
         fetch("http://localhost/olympia-backend/usuarios/guardar_colaborador.php", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                dni: dni,
-                rol: nuevoRolString === 'Organizador' ? '2' : nuevoRolString === 'Asistente' ? '3' : '4'
-            })
-        }).catch(err => console.log("Backend offline, rol guardado localmente"));
+            body: JSON.stringify(payload)
+        })
+        .then(async (resp) => {
+            const data = await resp.json();
+            if (data.status !== 'success') {
+                setError(data.mensaje || 'Error al actualizar el rol en el servidor.');
+                setSuccess('');
+                // Revertir
+                cargarUsuarios();
+            }
+        })
+        .catch(err => {
+            console.log("Backend offline, rol guardado localmente");
+        });
     };
 
     const handleAsignarRolForm = (e) => {
