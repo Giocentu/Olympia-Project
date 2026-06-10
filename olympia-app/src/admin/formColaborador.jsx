@@ -9,7 +9,7 @@ const FormColaborador = () => {
     fechaNac: '', // Ajustado para ser DATE según DB
     email: '',
     telefono: '',
-    rol: '2' // Suponiendo ID de Roles (Ej: 1=Admin, 2=Org Secundario, 3=Asistente)
+    rol: '2' // Suponiendo ID de Roles (Ej: 1=Admin, 2=Organizador, 3=Asistente)
   });
 
   const handleChange = (e) => {
@@ -86,8 +86,7 @@ const FormColaborador = () => {
     <div>
     <label className="block text-sm font-bold text-gray-700 mb-1">Rol de Trabajo</label>
     <select name="rol" value={formData.rol} onChange={handleChange} className="w-full p-2 border rounded bg-white outline-none focus:ring-2 focus:ring-orange-200">
-    <option value="2">Organizador Secundario</option>
-    <option value="3">Asistente de Campo</option>
+    <option value="2">Organizador</option>
     </select>
     </div>
 

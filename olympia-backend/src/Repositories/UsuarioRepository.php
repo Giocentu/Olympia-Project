@@ -51,21 +51,21 @@ class UsuarioRepository {
                    U.fecha_nac,
                    U.telefono_usuario,
                    COALESCE(
-                       (
-                           SELECT GROUP_CONCAT(rol_nombre SEPARATOR ', ')
-                           FROM (
-                               SELECT DISTINCT R.nombre_rol AS rol_nombre
-                               FROM List_colaboradores LC
-                               INNER JOIN Rol R ON LC.id_rol = R.id_rol
-                               WHERE LC.dni_usuario = U.dni_usuario
-                               UNION
-                               SELECT DISTINCT 'Capitán' AS rol_nombre
-                               FROM Plantilla_equipo PE
-                               WHERE PE.dni_usuario = U.dni_usuario AND PE.posicion_equipo = 'Capitán'
-                           ) AS temp_roles
+                       NULLIF(
+                           CONCAT_WS(', ',
+                               (SELECT GROUP_CONCAT(DISTINCT CASE WHEN r.nombre_rol = 'Administrador' THEN 'SuperAdmin' ELSE r.nombre_rol END SEPARATOR ', ')
+                                FROM List_colaboradores lc
+                                INNER JOIN Rol r ON lc.id_rol = r.id_rol
+                                WHERE lc.dni_usuario = U.dni_usuario),
+                               (SELECT 'Capitán' 
+                                FROM Plantilla_equipo pe
+                                WHERE pe.dni_usuario = U.dni_usuario AND pe.posicion_equipo = 'Capitán'
+                                LIMIT 1)
+                           ),
+                           ''
                        ),
                        'Sin rol asignado'
-                   ) AS roles_asignados 
+                   ) AS roles_asignados
             FROM Usuario U 
             ORDER BY U.nombre_usuario ASC
         ";

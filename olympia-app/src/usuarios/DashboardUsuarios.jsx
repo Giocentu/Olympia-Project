@@ -11,7 +11,7 @@ const DashboardUsuarios = () => {
     // Estado para asignar rol
     const [asignarData, setAsignarData] = useState({
         dni: '',
-        rol: '2' // 2=Organizador, 3=Asistente
+        rol: '2' // 2=Organizador, 4=Capitán (Revocar)
     });
 
     const cargarUsuarios = async () => {
@@ -80,7 +80,7 @@ const DashboardUsuarios = () => {
 
         const payload = {
             dni: dni,
-            rol: nuevoRolString === 'Organizador' ? '2' : nuevoRolString === 'Asistente' ? '3' : '4'
+            rol: nuevoRolString === 'Organizador' ? '2' : '4'
         };
 
         if (userObj) {
@@ -127,7 +127,7 @@ const DashboardUsuarios = () => {
             return;
         }
 
-        const rolString = asignarData.rol === '2' ? 'Organizador' : 'Asistente';
+        const rolString = asignarData.rol === '2' ? 'Organizador' : 'Capitán';
         cambiarRol(asignarData.dni, rolString);
         setAsignarData({ dni: '', rol: '2' });
     };
@@ -162,7 +162,7 @@ const DashboardUsuarios = () => {
                             Personal y Usuarios
                         </h1>
                         <p className="text-slate-400 text-sm mt-1">
-                            SuperAdmin Panel: Eleva roles de usuarios a Organizador o Asistente, o revoca privilegios.
+                            SuperAdmin Panel: Eleva roles de usuarios a Organizador, o revoca privilegios.
                         </p>
                     </div>
                 </div>
@@ -192,7 +192,7 @@ const DashboardUsuarios = () => {
                         Asignar Rol Rápido
                     </h2>
                     <p className="text-xs text-slate-400 leading-relaxed">
-                        Ingresa el DNI de un usuario previamente registrado en el sistema para elevarlo a Organizador o Asistente.
+                        Ingresa el DNI de un usuario previamente registrado en el sistema para promoverlo a Organizador o revocarlo a Capitán.
                     </p>
 
                     <form onSubmit={handleAsignarRolForm} className="space-y-4 pt-2">
@@ -210,15 +210,15 @@ const DashboardUsuarios = () => {
                         </div>
                         
                         <div>
-                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Seleccionar Rol</label>
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Acción a Realizar</label>
                             <select 
                                 name="rol" 
                                 value={asignarData.rol} 
                                 onChange={handleAsignarCambio} 
                                 className="block w-full px-3.5 py-2.5 bg-slate-950/60 border border-slate-850 rounded-xl focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none text-slate-200 text-xs cursor-pointer"
                             >
-                                <option value="2">Organizador Secundario</option>
-                                <option value="3">Asistente de Campo</option>
+                                <option value="2">Promover a Organizador</option>
+                                <option value="4">Revocar a Capitán (Quitar Privilegios)</option>
                             </select>
                         </div>
 
