@@ -81,26 +81,84 @@ const FormTorneo = () => {
         }
     };
 
+    const mostrarAlertaTorneo = (mensaje) => {
+        alert(mensaje);
+    };
+
+    const mostrarConfirmacion = (mensaje) => {
+        return window.confirm(mensaje);
+    };
+
+    const validarCamposObligatorios = () => {
+        if (!formData.nombreTorneo.trim() || !formData.fechaInicio || !formData.fechaFin) {
+            return false;
+        }
+        return true;
+    };
+
+    const validarFechaInicioNoPasada = () => {
+        if (!formData.fechaInicio) return true;
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+        
+        // Convertimos a fecha local del navegador
+        const [year, month, day] = formData.fechaInicio.split('-');
+        const fechaInicioObj = new Date(year, month - 1, day);
+        fechaInicioObj.setHours(0, 0, 0, 0);
+
+        if (fechaInicioObj < hoy) {
+            mostrarAlertaTorneo("La fecha de inicio no puede ser menor a la fecha actual.");
+            return false;
+        }
+        return true;
+    };
+
+    const validarCoherenciaFechas = () => {
+        if (new Date(formData.fechaFin) < new Date(formData.fechaInicio)) {
+            mostrarAlertaTorneo("La fecha de finalización no puede ser anterior a la fecha de inicio.");
+            return false;
+        }
+        return true;
+    };
+
+    const validarCapacidadSegunFormato = () => {
+        const maxEq = parseInt(formData.maxEquipos);
+        if (formData.formatoTorneo === 'Grupos' && maxEq < 4) {
+            mostrarAlertaTorneo("Para el formato 'Fase de Grupos' la capacidad máxima debe ser de al menos 4 equipos.");
+            return false;
+        }
+        return true;
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        // 1. Validación de fechas (HU-1.1)
-        if (new Date(formData.fechaFin) < new Date(formData.fechaInicio)) {
-            alert("La fecha de finalización no puede ser anterior a la fecha de inicio.");
+        // 1. Validación de campos obligatorios
+        if (!validarCamposObligatorios()) {
+            return;
+        }
+
+        // 2. Validación de fecha de inicio no en el pasado
+        if (!validarFechaInicioNoPasada()) {
+            return;
+        }
+
+        // 3. Validación de coherencia lógica de las fechas
+        if (!validarCoherenciaFechas()) {
+            return;
+        }
+
+        // 4. Validación de capacidad según formato
+        if (!validarCapacidadSegunFormato()) {
             return;
         }
 
         const maxEq = parseInt(formData.maxEquipos);
 
-        if (formData.formatoTorneo === 'Grupos' && maxEq < 4) {
-            alert("Para el formato 'Fase de Grupos' la capacidad máxima debe ser de al menos 4 equipos.");
-            return;
-        }
-
         if (formData.formatoTorneo === 'Eliminatoria') {
             const esPotenciaDe2 = (maxEq & (maxEq - 1)) === 0;
             if (!esPotenciaDe2) {
-                const confirmar = window.confirm(`Has configurado una capacidad de ${maxEq} equipos para un torneo Eliminatorio.\n\nAl no ser un número exacto para llaves perfectas (4, 8, 16...), el sistema asignará "Byes" (pases directos) a algunos equipos en la primera ronda.\n\n¿Deseas continuar?`);
+                const confirmar = mostrarConfirmacion(`Has configurado una capacidad de ${maxEq} equipos para un torneo Eliminatorio.\n\nAl no ser un número exacto para llaves perfectas (4, 8, 16...), el sistema asignará "Byes" (pases directos) a algunos equipos en la primera ronda.\n\n¿Deseas continuar?`);
                 if (!confirmar) return;
             }
         }

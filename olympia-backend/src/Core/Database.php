@@ -21,7 +21,7 @@ class Database {
      */
     public static function getConnection(): PDO {
         if (self::$instance === null) {
-            $host = "localhost";
+            $host = "127.0.0.1";
             $user = "root";
             $pass = "";
             $dbname = "db_olympia";

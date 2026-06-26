@@ -51,11 +51,29 @@ const DashboardCapitan = () => {
             localStorage.setItem('olympia_equipos', JSON.stringify(listaEquipos));
         }
 
-        const myTeams = listaEquipos.filter(eq => eq.capitanEmail === userEmail);
-        setEquipos(myTeams);
+        const sincronizarYEstablecerEquipos = async () => {
+            let list = [...listaEquipos];
+            try {
+                const resp = await fetch("http://localhost/olympia-backend/equipos/obtener_equipos.php");
+                const dbEquipos = await resp.json();
+                if (Array.isArray(dbEquipos)) {
+                    // Mapeamos los nombres y deportes de los equipos en la DB
+                    const dbTeamsMap = new Set(dbEquipos.map(eq => `${eq.nombre_equipo.toLowerCase()}_${eq.deporte_equipo.toLowerCase()}`));
+                    // Conservamos el equipo local si coincide su nombre y deporte con alguno de la DB
+                    list = list.filter(eq => {
+                        const key = `${eq.nombre.toLowerCase()}_${eq.deporte.toLowerCase()}`;
+                        return dbTeamsMap.has(key);
+                    });
+                    localStorage.setItem('olympia_equipos', JSON.stringify(list));
+                }
+            } catch (err) {
+                console.error("Error al sincronizar equipos con la base de datos:", err);
+            }
 
-        // Cargar solicitudes de la DB
-        const cargarSolicitudes = async () => {
+            const myTeams = list.filter(eq => eq.capitanEmail === userEmail);
+            setEquipos(myTeams);
+
+            // Cargar solicitudes de la DB
             try {
                 const resp = await fetch("http://localhost/olympia-backend/solicitudes/obtener_solicitudes.php");
                 const data = await resp.json();
@@ -73,13 +91,13 @@ const DashboardCapitan = () => {
                 console.error("Error al cargar solicitudes de la DB:", err);
                 const storedSolicitudes = localStorage.getItem('olympia_solicitudes');
                 if (storedSolicitudes) {
-                    const list = JSON.parse(storedSolicitudes);
-                    setSolicitudes(list.filter(sol => myTeams.some(eq => eq.id.toString() === sol.idEquipo.toString())));
+                    const listSols = JSON.parse(storedSolicitudes);
+                    setSolicitudes(listSols.filter(sol => myTeams.some(eq => eq.id.toString() === sol.idEquipo.toString())));
                 }
             }
         };
 
-        cargarSolicitudes();
+        sincronizarYEstablecerEquipos();
     }, [userEmail]);
 
     const getPlayerLimit = (deporte) => {

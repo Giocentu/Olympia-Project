@@ -19,10 +19,28 @@ const HistorialResultados = () => {
     const [filtroTorneo, setFiltroTorneo] = useState('Todos');
 
     useEffect(() => {
-        // 1. Cargar equipos y plantillas de localStorage
-        const storedEquipos = localStorage.getItem('olympia_equipos');
-        const listaEquipos = storedEquipos ? JSON.parse(storedEquipos) : [];
-        setTodosEquipos(listaEquipos);
+        // 1. Cargar equipos y plantillas de localStorage y sincronizar con la DB
+        const sincronizarEquipos = async () => {
+            const storedEquipos = localStorage.getItem('olympia_equipos');
+            let listaEquipos = storedEquipos ? JSON.parse(storedEquipos) : [];
+            try {
+                const resp = await fetch("http://localhost/olympia-backend/equipos/obtener_equipos.php");
+                const dbEquipos = await resp.json();
+                if (Array.isArray(dbEquipos)) {
+                    const dbTeamsMap = new Set(dbEquipos.map(eq => `${eq.nombre_equipo.toLowerCase()}_${eq.deporte_equipo.toLowerCase()}`));
+                    listaEquipos = listaEquipos.filter(eq => {
+                        const key = `${eq.nombre.toLowerCase()}_${eq.deporte.toLowerCase()}`;
+                        return dbTeamsMap.has(key);
+                    });
+                    localStorage.setItem('olympia_equipos', JSON.stringify(listaEquipos));
+                }
+            } catch (err) {
+                console.error("Error al sincronizar equipos en HistorialResultados:", err);
+            }
+            setTodosEquipos(listaEquipos);
+        };
+
+        sincronizarEquipos();
 
         // 2. Cargar torneos
         const storedTorneos = localStorage.getItem('olympia_torneos_local');

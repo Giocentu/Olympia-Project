@@ -9,20 +9,31 @@ const AccesoPin = () => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
+    const mostrarErrorAsistente = (mensaje) => {
+        setError(mensaje);
+    };
+
+    const validarCamposVacios = (nombreVal, pinVal) => {
+        if (!nombreVal.trim()) {
+            mostrarErrorAsistente('Por favor, ingresa tu Nombre y Apellido para identificarte al modificar resultados.');
+            return false;
+        }
+
+        if (!pinVal.trim()) {
+            mostrarErrorAsistente('Por favor, ingresa el código PIN de acceso.');
+            return false;
+        }
+
+        return true;
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
         setLoading(true);
 
-        // Validación: Nombre obligatorio para poder auditar quién modifica resultados (punto 5)
-        if (!nombre.trim()) {
-            setError('Por favor, ingresa tu Nombre y Apellido para identificarte al modificar resultados.');
-            setLoading(false);
-            return;
-        }
-
-        if (!pin.trim()) {
-            setError('Por favor, ingresa el código PIN de acceso.');
+        // Validación: Nombre y PIN obligatorios
+        if (!validarCamposVacios(nombre, pin)) {
             setLoading(false);
             return;
         }
@@ -46,11 +57,11 @@ const AccesoPin = () => {
                 // Redirigir a la vista del asistente
                 navigate(`/asistente/${matchingTorneoId}`);
             } else {
-                setError(data.mensaje || 'El código PIN ingresado es incorrecto o ya ha expirado. Por favor, solicita uno nuevo al organizador.');
+                mostrarErrorAsistente(data.mensaje || 'El código PIN ingresado es incorrecto o ya ha expirado. Por favor, solicita uno nuevo al organizador.');
                 setLoading(false);
             }
         } catch (err) {
-            setError('Error al conectar con el servidor.');
+            mostrarErrorAsistente('Error al conectar con el servidor.');
             setLoading(false);
         }
     };
@@ -113,7 +124,7 @@ const AccesoPin = () => {
                                 setPin(e.target.value);
                                 setError('');
                             }}
-                            placeholder="PIN (Ej. ref123)"
+                            placeholder="CÓDIGO PIN"
                             className="block w-full py-3 px-4 bg-slate-950/60 border border-slate-800 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none text-slate-100 text-center tracking-widest font-mono font-bold text-sm transition-colors uppercase placeholder:text-slate-600 placeholder:tracking-normal"
                             maxLength={8}
                         />
@@ -127,12 +138,6 @@ const AccesoPin = () => {
                         {loading ? 'VERIFICANDO...' : 'INGRESAR AL FIXTURE'}
                     </button>
                 </form>
-
-                <div className="mt-6 text-center">
-                    <p className="text-[10px] text-indigo-400/80 font-bold bg-indigo-500/5 py-2 px-3 rounded-lg border border-indigo-500/10">
-                        Demo PIN rápido: <span className="font-mono text-white select-all">ref123</span>
-                    </p>
-                </div>
             </div>
         </div>
     );

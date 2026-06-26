@@ -8,12 +8,32 @@ const ListaTorneos = () => {
     const [cargando, setCargando] = useState(true);
     const [pins, setPins] = useState({}); // Mapa de idTorneo -> PIN (punto 3)
     const [copiadoId, setCopiadoId] = useState(null); // Feedback visual de PIN copiado
+    const [filtroNombre, setFiltroNombre] = useState('');
+    const [filtroEstado, setFiltroEstado] = useState('Todos');
 
-    // Cargar los PINs de los torneos (del backend o localStorage)
+    const torneosFiltradosYOrdenados = (() => {
+        let filtrados = torneos.filter(t => {
+            const cumpleNombre = t.nombre_torneo.toLowerCase().includes(filtroNombre.toLowerCase());
+            const cumpleEstado = filtroEstado === 'Todos' || t.estado === filtroEstado;
+            return cumpleNombre && cumpleEstado;
+        });
+
+        filtrados.sort((a, b) => {
+            const isAFinalizado = a.estado === 'Finalizado';
+            const isBFinalizado = b.estado === 'Finalizado';
+            if (isAFinalizado && !isBFinalizado) return 1;
+            if (!isAFinalizado && isBFinalizado) return -1;
+            return Number(b.id_torneo) - Number(a.id_torneo);
+        });
+
+        return filtrados;
+    })();
+
+    // Cargar los PINs de los torneos (del backend)
     const cargarPins = (listaTorneos) => {
         const pMap = {};
         listaTorneos.forEach(t => {
-            const p = t.pin_asistente || localStorage.getItem(`olympia_pin_${t.id_torneo}`);
+            const p = t.pin_asistente;
             if (p) pMap[t.id_torneo] = p;
         });
         setPins(pMap);
@@ -25,9 +45,38 @@ const ListaTorneos = () => {
             const resp = await fetch("http://localhost/olympia-backend/torneos/obtener_torneos.php");
             const data = await resp.json();
             if (Array.isArray(data)) {
-                // Filtramos los eliminados si manejamos baja lógica en localStorage o localmente
-                const eliminados = JSON.parse(localStorage.getItem('olympia_eliminados_ids') || '[]');
-                const torneosVisibles = data.filter(t => !eliminados.includes(t.id_torneo));
+                // Sincronizar baja lógica (olympia_eliminados_ids) ante un drop/reset de DB
+                const dbIds = data.map(t => parseInt(t.id_torneo));
+                const maxDbId = dbIds.length > 0 ? Math.max(...dbIds) : 0;
+                
+                let eliminados = JSON.parse(localStorage.getItem('olympia_eliminados_ids') || '[]').map(id => parseInt(id));
+                
+                // Detectar reset/drop de la DB comparando la fecha de creación del primer torneo semilla (ID = 1)
+                const torneoUno = data.find(t => parseInt(t.id_torneo) === 1);
+                const currentFingerprint = torneoUno ? (torneoUno.created_at || '') : '';
+                const savedFingerprint = localStorage.getItem('olympia_db_fingerprint') || '';
+                
+                if (currentFingerprint && currentFingerprint !== savedFingerprint) {
+                    // La base de datos se ha restablecido (nueva fecha de creación para torneo semilla)
+                    eliminados = [];
+                    localStorage.setItem('olympia_eliminados_ids', JSON.stringify([]));
+                    localStorage.setItem('olympia_db_fingerprint', currentFingerprint);
+                } else if (maxDbId <= 4) {
+                    // O si volvió al estado inicial de seeds de forma directa
+                    eliminados = [];
+                    localStorage.setItem('olympia_eliminados_ids', JSON.stringify([]));
+                    if (currentFingerprint) {
+                        localStorage.setItem('olympia_db_fingerprint', currentFingerprint);
+                    }
+                } else {
+                    // Limpiar IDs huérfanos mayores al ID máximo actual de la DB
+                    eliminados = eliminados.filter(id => id <= maxDbId);
+                    localStorage.setItem('olympia_eliminados_ids', JSON.stringify(eliminados));
+                }
+                
+                localStorage.setItem('olympia_max_seen_torneo_id', maxDbId.toString());
+
+                const torneosVisibles = data.filter(t => !eliminados.includes(parseInt(t.id_torneo)));
                 setTorneos(torneosVisibles);
                 cargarPins(torneosVisibles);
             }
@@ -54,7 +103,6 @@ const ListaTorneos = () => {
 
             if (data.status === 'success') {
                 const pin = data.pin;
-                localStorage.setItem(`olympia_pin_${idTorneo}`, pin);
                 setPins(prev => ({ ...prev, [idTorneo]: pin }));
                 alert(`¡Código PIN generado con éxito: ${pin}!`);
             } else {
@@ -87,8 +135,11 @@ const ListaTorneos = () => {
             const confirmar = window.confirm(`¿Estás seguro de que deseas eliminar el torneo "${nombreTorneo}"?\n\nEsta acción es irreversible.`);
             if (confirmar) {
                 // Simulación de baja lógica (HU-1.3)
-                const eliminados = JSON.parse(localStorage.getItem('olympia_eliminados_ids') || '[]');
-                eliminados.push(idTorneo);
+                const eliminados = JSON.parse(localStorage.getItem('olympia_eliminados_ids') || '[]').map(id => parseInt(id));
+                const parsedId = parseInt(idTorneo);
+                if (!eliminados.includes(parsedId)) {
+                    eliminados.push(parsedId);
+                }
                 localStorage.setItem('olympia_eliminados_ids', JSON.stringify(eliminados));
                 
                 // Actualizar lista en pantalla
@@ -128,12 +179,41 @@ const ListaTorneos = () => {
                 </Link>
             </div>
 
+            {/* Barra de Filtros */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row gap-4 items-center">
+                <div className="relative flex-grow w-full">
+                    <input 
+                        type="text"
+                        placeholder="Buscar torneo por nombre..."
+                        value={filtroNombre}
+                        onChange={(e) => setFiltroNombre(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-850 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                    <div className="absolute left-3.5 top-3 text-slate-500">
+                        <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                </div>
+                <div className="w-full sm:w-48 shrink-0">
+                    <select
+                        value={filtroEstado}
+                        onChange={(e) => setFiltroEstado(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-slate-950 border border-slate-850 rounded-xl text-sm text-slate-300 focus:outline-none focus:border-blue-500 transition-colors"
+                    >
+                        <option value="Todos">Todos los Estados</option>
+                        <option value="Activo">Activo</option>
+                        <option value="Programado">Programado</option>
+                        <option value="Finalizado">Finalizado</option>
+                    </select>
+                </div>
+            </div>
+
             <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-950/60 border-b border-slate-850 text-xs font-bold uppercase tracking-wider text-slate-400">
-                                <th className="px-6 py-4">ID</th>
                                 <th className="px-6 py-4">Nombre del Torneo</th>
                                 <th className="px-6 py-4">Deporte / Categoría</th>
                                 <th className="px-6 py-4">Estado</th>
@@ -144,22 +224,19 @@ const ListaTorneos = () => {
                         <tbody className="divide-y divide-slate-850">
                             {cargando ? (
                                 <tr>
-                                    <td colSpan="6" className="px-6 py-12 text-center text-slate-500 font-bold">
+                                    <td colSpan="5" className="px-6 py-12 text-center text-slate-500 font-bold">
                                         Cargando torneos...
                                     </td>
                                 </tr>
-                            ) : torneos.length === 0 ? (
+                            ) : torneosFiltradosYOrdenados.length === 0 ? (
                                 <tr>
-                                    <td colSpan="6" className="px-6 py-12 text-center text-slate-500">
-                                        No hay torneos registrados.
+                                    <td colSpan="5" className="px-6 py-12 text-center text-slate-500">
+                                        No se encontraron torneos registrados.
                                     </td>
                                 </tr>
                             ) : (
-                                torneos.map((t) => (
+                                torneosFiltradosYOrdenados.map((t) => (
                                     <tr key={t.id_torneo} className="hover:bg-slate-800/30 transition-colors">
-                                        <td className="px-6 py-5 text-sm font-semibold text-slate-500">
-                                            #{t.id_torneo}
-                                        </td>
                                         <td className="px-6 py-5 text-sm font-black text-white">
                                             {t.nombre_torneo}
                                         </td>
@@ -218,7 +295,7 @@ const ListaTorneos = () => {
                                                 >
                                                     <Settings className="h-4 w-4" />
                                                 </button>
-
+ 
                                                 <button
                                                     onClick={() => handleEliminarTorneo(t.id_torneo, t.nombre_torneo)}
                                                     className="p-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 hover:text-red-300 rounded-lg transition-colors"

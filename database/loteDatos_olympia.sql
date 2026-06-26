@@ -3,25 +3,6 @@
 -- Adaptado a la nueva estructura de db-olympia.sql y todos los casos de prueba
 -- Nota: La contraseña para todos los usuarios cargados es: 'password'
 -- =========================================================================
-
--- Limpiar tablas para evitar conflictos al re-ejecutar (respetando dependencias)
-SET FOREIGN_KEY_CHECKS = 0;
-TRUNCATE TABLE Resultado_partido;
-TRUNCATE TABLE Partido;
-TRUNCATE TABLE Torneo_equipo;
-TRUNCATE TABLE Plantilla_equipo;
-TRUNCATE TABLE Equipo;
-TRUNCATE TABLE List_colaboradores;
-TRUNCATE TABLE Solicitud;
-TRUNCATE TABLE Torneo;
-TRUNCATE TABLE Usuario;
-TRUNCATE TABLE Disciplina;
-TRUNCATE TABLE Deporte;
-TRUNCATE TABLE Categoria;
-TRUNCATE TABLE Formato;
-TRUNCATE TABLE Rol;
-SET FOREIGN_KEY_CHECKS = 1;
-
 -- 1. INSERTAR ROLES BÁSICOS
 INSERT INTO Rol (id_rol, nombre_rol) VALUES
 (1, 'Administrador'),
@@ -144,18 +125,6 @@ INSERT INTO Torneo_equipo (fecha_inscripcion, id_torneo, id_equipo) VALUES
 (CURDATE(), 2, 7);
 
 -- 12. CREAR SOLICITUDES DE PRUEBA
--- Asegurar tabla Solicitud
-CREATE TABLE IF NOT EXISTS Solicitud (
-    id_solicitud VARCHAR(50) NOT NULL,
-    id_torneo INT NOT NULL,
-    id_equipo INT NOT NULL,
-    estado_solicitud VARCHAR(20) NOT NULL DEFAULT 'Pendiente',
-    fecha_solicitud DATE NOT NULL,
-    PRIMARY KEY (id_solicitud),
-    FOREIGN KEY (id_torneo) REFERENCES Torneo(id_torneo) ON DELETE CASCADE,
-    FOREIGN KEY (id_equipo) REFERENCES Equipo(id_equipo) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 INSERT INTO Solicitud (id_solicitud, id_torneo, id_equipo, estado_solicitud, fecha_solicitud) VALUES
 ('sol_prueba_1', 1, 3, 'Pendiente', CURDATE()), -- Solicitud Pendiente para Torneo 1
 ('sol_prueba_2', 1, 4, 'Aprobado', DATE_SUB(CURDATE(), INTERVAL 1 DAY)), -- Solicitud Aprobada

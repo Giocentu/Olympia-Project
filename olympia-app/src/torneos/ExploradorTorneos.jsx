@@ -50,20 +50,64 @@ const ExploradorTorneos = () => {
             }
 
             // Excluir los torneos que hayan sido eliminados mediante baja lógica
-            const eliminados = JSON.parse(localStorage.getItem('olympia_eliminados_ids') || '[]');
-            setTorneos(torneosLista.filter(t => !eliminados.includes(t.id_torneo)));
+            let eliminados = JSON.parse(localStorage.getItem('olympia_eliminados_ids') || '[]').map(id => parseInt(id));
+
+            if (backendExito && torneosLista.length > 0) {
+                const dbIds = torneosLista.map(t => parseInt(t.id_torneo));
+                const maxDbId = dbIds.length > 0 ? Math.max(...dbIds) : 0;
+
+                const torneoUno = torneosLista.find(t => parseInt(t.id_torneo) === 1);
+                const currentFingerprint = torneoUno ? (torneoUno.created_at || '') : '';
+                const savedFingerprint = localStorage.getItem('olympia_db_fingerprint') || '';
+
+                if (currentFingerprint && currentFingerprint !== savedFingerprint) {
+                    eliminados = [];
+                    localStorage.setItem('olympia_eliminados_ids', JSON.stringify([]));
+                    localStorage.setItem('olympia_db_fingerprint', currentFingerprint);
+                } else if (maxDbId <= 4) {
+                    eliminados = [];
+                    localStorage.setItem('olympia_eliminados_ids', JSON.stringify([]));
+                    if (currentFingerprint) {
+                        localStorage.setItem('olympia_db_fingerprint', currentFingerprint);
+                    }
+                } else {
+                    eliminados = eliminados.filter(id => id <= maxDbId);
+                    localStorage.setItem('olympia_eliminados_ids', JSON.stringify(eliminados));
+                }
+
+                localStorage.setItem('olympia_max_seen_torneo_id', maxDbId.toString());
+            }
+
+            setTorneos(torneosLista.filter(t => !eliminados.includes(parseInt(t.id_torneo))));
         };
 
-        // Cargar Equipos del capitán
-        const storedEquipos = localStorage.getItem('olympia_equipos');
-        if (storedEquipos) {
-            const list = JSON.parse(storedEquipos);
+        // Cargar Equipos del capitán y sincronizar con la DB
+        const sincronizarEquipos = async () => {
+            const stored = localStorage.getItem('olympia_equipos');
+            let list = stored ? JSON.parse(stored) : [];
+            try {
+                const resp = await fetch("http://localhost/olympia-backend/equipos/obtener_equipos.php");
+                const dbEquipos = await resp.json();
+                if (Array.isArray(dbEquipos)) {
+                    const dbTeamsMap = new Set(dbEquipos.map(eq => `${eq.nombre_equipo.toLowerCase()}_${eq.deporte_equipo.toLowerCase()}`));
+                    list = list.filter(eq => {
+                        const key = `${eq.nombre.toLowerCase()}_${eq.deporte.toLowerCase()}`;
+                        return dbTeamsMap.has(key);
+                    });
+                    localStorage.setItem('olympia_equipos', JSON.stringify(list));
+                }
+            } catch (err) {
+                console.error("Error al sincronizar equipos en explorador:", err);
+            }
+
             const filtrados = list.filter(eq => eq.capitanEmail === userEmail);
             setEquipos(filtrados);
             if (filtrados.length > 0) {
                 setEquipoSeleccionadoId(filtrados[0].id);
             }
-        }
+        };
+
+        sincronizarEquipos();
 
         // Cargar solicitudes de inscripción de la DB
         const cargarSolicitudes = async () => {
@@ -99,47 +143,89 @@ const ExploradorTorneos = () => {
         }
     };
 
+    const mostrarErrorInscripcion = (mensaje) => {
+        setError(mensaje);
+    };
+
+    const mostrarEstadoInscripcion = (mensaje) => {
+        setError(mensaje);
+    };
+
+    const validarSeleccionEquipos = () => {
+        if (!equipoSeleccionadoId) {
+            mostrarErrorInscripcion('Debes registrar o seleccionar un equipo primero.');
+            return false;
+        }
+        return true;
+    };
+
+    const validarCoincidenciaDeporte = (equipoDeporte, torneoDeporte) => {
+        if (equipoDeporte.toLowerCase() !== torneoDeporte.toLowerCase()) {
+            mostrarErrorInscripcion(`El deporte del equipo (${equipoDeporte}) no coincide con el del torneo (${torneoDeporte})`);
+            return false;
+        }
+        return true;
+    };
+
+    const validarPlantillaMin = (equipo, torneoDeporte) => {
+        const minReq = getMinPlayers(torneoDeporte);
+        const count = equipo.jugadores ? equipo.jugadores.length : 0;
+        if (count < minReq) {
+            mostrarErrorInscripcion(`No cumples con el mínimo de jugadores: "${equipo.nombre}" tiene ${count} pero ${torneoDeporte === 'Futbol' ? 'Fútbol' : torneoDeporte} requiere al menos ${minReq} jugadores.`);
+            return false;
+        }
+        return true;
+    };
+
+    const deshabilitarBoton = () => {
+        console.log("Deshabilitando botón de inscripción por solicitud duplicada.");
+    };
+
+    const validarCuposDisponibles = (torneo) => {
+        if (torneo.cupos_libres <= 0) {
+            mostrarEstadoInscripcion('El torneo no cuenta con cupos libres disponibles.');
+            return false;
+        }
+        return true;
+    };
+
     const handleInscribirse = async (torneo) => {
         setError('');
         setSuccess('');
 
-        if (!equipoSeleccionadoId) {
-            setError('Debes registrar o seleccionar un equipo primero.');
+        // 1. Validar selección
+        if (!validarSeleccionEquipos()) {
             return;
         }
 
-        const equipo = equipos.find(eq => eq.id === equipoSeleccionadoId);
+        const equipo = equipos.find(eq => eq.id?.toString() === equipoSeleccionadoId?.toString());
         if (!equipo) {
-            setError('El equipo seleccionado no es válido.');
+            mostrarErrorInscripcion('El equipo seleccionado no es válido.');
             return;
         }
 
-        // 1. Validar que el deporte coincida
-        if (equipo.deporte.toLowerCase() !== torneo.deporte_torneo.toLowerCase()) {
-            setError(`El deporte del equipo (${equipo.deporte}) no coincide con el del torneo (${torneo.deporte_torneo})`);
+        // 2. Validar deporte
+        if (!validarCoincidenciaDeporte(equipo.deporte, torneo.deporte_torneo)) {
             return;
         }
 
-        // 2. Validar que la plantilla cumpla con el mínimo
-        const minReq = getMinPlayers(torneo.deporte_torneo);
-        const count = equipo.jugadores ? equipo.jugadores.length : 0;
-        if (count < minReq) {
-            setError(`No cumples con el mínimo de jugadores: "${equipo.nombre}" tiene ${count} pero ${torneo.deporte_torneo === 'Futbol' ? 'Fútbol' : torneo.deporte_torneo} requiere al menos ${minReq} jugadores.`);
+        // 3. Validar plantilla mínima
+        if (!validarPlantillaMin(equipo, torneo.deporte_torneo)) {
             return;
         }
 
-        // 3. Validar si ya hay una solicitud o inscripción activa (comparación flexible de ID)
+        // 4. Validar inscripción duplicada
         const yaSolicitado = solicitudes.some(sol => 
             sol.idTorneo.toString() === torneo.id_torneo.toString() && sol.idEquipo.toString() === equipo.id.toString()
         );
         if (yaSolicitado) {
-            setError(`Ya has solicitado la inscripción de "${equipo.nombre}" en este torneo.`);
+            deshabilitarBoton();
+            mostrarErrorInscripcion(`Ya has solicitado la inscripción de "${equipo.nombre}" en este torneo.`);
             return;
         }
 
-        // 4. Validar cupos
-        if (torneo.cupos_libres <= 0) {
-            setError('El torneo no cuenta con cupos libres disponibles.');
+        // 5. Validar cupos
+        if (!validarCuposDisponibles(torneo)) {
             return;
         }
 
@@ -163,10 +249,10 @@ const ExploradorTorneos = () => {
                     setSolicitudes(dataSols);
                 }
             } else {
-                setError(data.mensaje || 'Error al enviar la solicitud.');
+                mostrarErrorInscripcion(data.mensaje || 'Error al enviar la solicitud.');
             }
         } catch (err) {
-            setError('Error de conexión con el servidor.');
+            mostrarErrorInscripcion('Error de conexión con el servidor.');
         }
     };
 
@@ -177,7 +263,7 @@ const ExploradorTorneos = () => {
         return matchesSport && matchesSearch;
     });
 
-    const selectedTeam = equipos.find(e => e.id === equipoSeleccionadoId);
+    const selectedTeam = equipos.find(e => e.id?.toString() === equipoSeleccionadoId?.toString());
 
     return (
         <div className="space-y-6 animate-fadeIn">

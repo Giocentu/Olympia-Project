@@ -19,7 +19,7 @@ const GestorPlantilla = () => {
         const storedEquipos = localStorage.getItem('olympia_equipos');
         if (storedEquipos) {
             const list = JSON.parse(storedEquipos);
-            const found = list.find(eq => eq.id === idEquipo);
+            const found = list.find(eq => eq.id.toString() === idEquipo.toString());
             if (found) {
                 setTeam(found);
             }
@@ -98,7 +98,7 @@ const GestorPlantilla = () => {
         const storedEquipos = localStorage.getItem('olympia_equipos');
         if (storedEquipos) {
             const list = JSON.parse(storedEquipos);
-            const index = list.findIndex(eq => eq.id === idEquipo);
+            const index = list.findIndex(eq => eq.id.toString() === idEquipo.toString());
             if (index !== -1) {
                 if (!list[index].jugadores) list[index].jugadores = [];
                 list[index].jugadores.push({ dni, nombre, apellido });
@@ -135,7 +135,7 @@ const GestorPlantilla = () => {
         const storedEquipos = localStorage.getItem('olympia_equipos');
         if (storedEquipos) {
             const list = JSON.parse(storedEquipos);
-            const index = list.findIndex(eq => eq.id === idEquipo);
+            const index = list.findIndex(eq => eq.id.toString() === idEquipo.toString());
             if (index !== -1) {
                 list[index].jugadores = list[index].jugadores.filter(j => j.dni !== dni);
                 localStorage.setItem('olympia_equipos', JSON.stringify(list));

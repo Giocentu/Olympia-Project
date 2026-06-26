@@ -191,8 +191,7 @@ class EquipoController {
 
             try {
                 // Borrar inscripciones previas de este torneo
-                $stmtDel = $db->prepare("DELETE FROM Torneo_equipo WHERE id_torneo = :id_torneo");
-                $stmtDel->execute(['id_torneo' => $idTorneo]);
+                $this->equipoRepo->eliminarInscripcionesTorneo($idTorneo);
 
                 // Insertar las nuevas asignaciones
                 foreach ($equiposIds as $idEquipo) {
@@ -210,6 +209,32 @@ class EquipoController {
                 throw $e;
             }
 
+        } catch (Exception $e) {
+            echo json_encode([
+                "status" => "error",
+                "mensaje" => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Obtiene todos los equipos del sistema.
+     * Endpoint: obtener_equipos.php (GET)
+     */
+    public function obtenerTodosLosEquipos(): void {
+        try {
+            $equiposRaw = $this->equipoRepo->findAll();
+            $result = [];
+            foreach ($equiposRaw as $e) {
+                $result[] = [
+                    'id_equipo' => $e->id_equipo,
+                    'nombre_equipo' => $e->nombre_equipo,
+                    'descripcion_equipo' => $e->descripcion_equipo,
+                    'categoria_equipo' => $e->categoria_equipo,
+                    'deporte_equipo' => $e->deporte_equipo
+                ];
+            }
+            echo json_encode($result);
         } catch (Exception $e) {
             echo json_encode([
                 "status" => "error",

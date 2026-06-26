@@ -60,15 +60,7 @@ class TorneoController {
                         $rolId = 3; // Asistente
                     }
 
-                    $stmtColab = $db->prepare("
-                        INSERT IGNORE INTO List_colaboradores (fecha_registro, dni_usuario, id_torneo, id_rol)
-                        VALUES (CURDATE(), :dni, :id_torneo, :rol_id)
-                    ");
-                    $stmtColab->execute([
-                        'dni' => $creadorDni,
-                        'id_torneo' => $torneo->id_torneo,
-                        'rol_id' => $rolId
-                    ]);
+                    $this->torneoRepo->registrarCreadorColaborador($creadorDni, $torneo->id_torneo, $rolId);
                 }
 
                 echo json_encode([
@@ -93,7 +85,9 @@ class TorneoController {
      */
     public function obtenerTorneos(): void {
         try {
+            $db = Database::getConnection();
             $torneos = $this->torneoRepo->findAll();
+            $equipoRepo = new \Olympia\Repositories\EquipoRepository($db);
             $result = [];
             foreach ($torneos as $t) {
                 $hoy = date('Y-m-d');
@@ -103,6 +97,9 @@ class TorneoController {
                 } elseif ($hoy >= $t->torneo_inicio && $hoy <= $t->torneo_fin) {
                     $estado = 'Activo';
                 }
+
+                $inscriptos = count($equipoRepo->findByTorneo($t->id_torneo));
+                $cuposLibres = max(0, $t->max_equipos - $inscriptos);
 
                 $result[] = [
                     'id_torneo' => $t->id_torneo,
@@ -114,7 +111,9 @@ class TorneoController {
                     'categoria_torneo' => $t->categoria_torneo,
                     'deporte_torneo' => $t->deporte_torneo,
                     'pin_asistente' => $t->pin_asistente,
-                    'estado' => $estado
+                    'estado' => $estado,
+                    'cupos_libres' => $cuposLibres,
+                    'created_at' => $t->created_at
                 ];
             }
 

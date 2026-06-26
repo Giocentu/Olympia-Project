@@ -172,7 +172,7 @@ const LoginPage = () => {
                         onClick={() => navigate('/asistente-pin')}
                         className="text-xs font-semibold px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition-all"
                     >
-                        Ingreso Asistente (PIN)
+                        Ingreso Asistente
                     </button>
                 </div>
             </header>

@@ -1,4 +1,5 @@
-CREATE DATABASE IF NOT EXISTS db_olympia;
+DROP DATABASE IF EXISTS db_olympia;
+CREATE DATABASE db_olympia;
 USE db_olympia;
 
 -- ==============================================================================
@@ -232,3 +233,22 @@ ALTER TABLE Resultado_partido
 ALTER TABLE Resultado_partido 
   ADD CONSTRAINT chk_res_con CHECK (condicion IN ('Local', 'Visitante')),
   ADD CONSTRAINT chk_res_pun CHECK (puntuacion >= 0);
+
+
+-- ------------------------------------------------------------------------------
+-- TABLA: Solicitud
+-- Descripción: Registra las solicitudes de inscripción de los equipos a los torneos.
+-- ------------------------------------------------------------------------------
+CREATE TABLE Solicitud
+(
+  id_solicitud VARCHAR(50) NOT NULL,
+  id_torneo INT NOT NULL,
+  id_equipo INT NOT NULL,
+  estado_solicitud VARCHAR(20) NOT NULL DEFAULT 'Pendiente',
+  fecha_solicitud DATE NOT NULL,
+  PRIMARY KEY (id_solicitud)
+);
+
+ALTER TABLE Solicitud 
+  ADD CONSTRAINT fk_sol_tor FOREIGN KEY (id_torneo) REFERENCES Torneo(id_torneo) ON DELETE CASCADE,
+  ADD CONSTRAINT fk_sol_equ FOREIGN KEY (id_equipo) REFERENCES Equipo(id_equipo) ON DELETE CASCADE;

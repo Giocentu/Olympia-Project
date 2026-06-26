@@ -231,15 +231,9 @@ class UsuarioController {
                 }
 
                 // Obtener ID del rol (Asistente = 3, Organizador = 2, Capitán/Revocar = 4)
-                $rolNombre = strtolower($input['rol'] ?? 'asistente');
-                
-                if ($rolNombre === '4' || $rolNombre === 'capitán' || $rolNombre === 'capitan') {
+                $rolNombre = strtolower($input['rol'] ?? 'asistente');                if ($rolNombre === '4' || $rolNombre === 'capitán' || $rolNombre === 'capitan') {
                     // Si el rol es Capitán/4, removemos al usuario de List_colaboradores (revocar privilegios de colaborador)
-                    $stmtDel = $db->prepare("
-                        DELETE FROM List_colaboradores 
-                        WHERE dni_usuario = :dni
-                    ");
-                    $stmtDel->execute(['dni' => $usuario->dni_usuario]);
+                    $this->usuarioRepo->eliminarColaboradoresPorDni($usuario->dni_usuario);
                 } else {
                     $idRol = ($rolNombre === 'organizador' || $rolNombre === '2') ? 2 : 3;
 
@@ -248,17 +242,7 @@ class UsuarioController {
                     // Generalmente se añade a List_colaboradores para un torneo.
                     $idTorneo = !empty($input['id_torneo']) ? (int)$input['id_torneo'] : 1; // Fallback a Torneo 1 si no se especifica
 
-                    $stmtCol = $db->prepare("
-                        INSERT INTO List_colaboradores (fecha_registro, dni_usuario, id_torneo, id_rol)
-                        VALUES (:fecha, :dni, :id_torneo, :id_rol)
-                        ON DUPLICATE KEY UPDATE fecha_registro = :fecha, id_rol = :id_rol
-                    ");
-                    $stmtCol->execute([
-                        'fecha' => date('Y-m-d'),
-                        'dni' => $usuario->dni_usuario,
-                        'id_torneo' => $idTorneo,
-                        'id_rol' => $idRol
-                    ]);
+                    $this->usuarioRepo->guardarColaborador($usuario->dni_usuario, $idTorneo, $idRol);
                 }
 
                 $db->commit();
@@ -325,18 +309,7 @@ class UsuarioController {
                 // Si se especificó un equipo, asociarlo a la plantilla
                 if ($idEquipo !== null) {
                     $idEquipo = (int)$idEquipo;
-                    
-                    // Verificar si ya está en la plantilla
-                    $stmtCheck = $db->prepare("SELECT 1 FROM Plantilla_equipo WHERE id_equipo = :id_equipo AND dni_usuario = :dni");
-                    $stmtCheck->execute(['id_equipo' => $idEquipo, 'dni' => $dni]);
-                    
-                    if (!$stmtCheck->fetch()) {
-                        $stmtPlantilla = $db->prepare("
-                            INSERT INTO Plantilla_equipo (posicion_equipo, nro_dorsal, id_equipo, dni_usuario)
-                            VALUES ('Jugador', 10, :id_equipo, :dni)
-                        ");
-                        $stmtPlantilla->execute(['id_equipo' => $idEquipo, 'dni' => $dni]);
-                    }
+                    $this->usuarioRepo->asociarAPlantilla($dni, $idEquipo);
                 }
 
                 $db->commit();

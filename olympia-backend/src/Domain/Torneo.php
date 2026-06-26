@@ -20,6 +20,7 @@ class Torneo {
     public string $categoria_torneo;
     public string $deporte_torneo;
     public ?string $pin_asistente = null; // Para acceso de asistentes
+    public ?string $created_at = null;
 
     /**
      * Constructor de la clase Torneo.

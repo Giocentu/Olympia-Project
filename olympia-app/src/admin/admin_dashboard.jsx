@@ -13,8 +13,38 @@ const DashboardAdmin = () => {
             const resp = await fetch("http://localhost/olympia-backend/torneos/obtener_torneos.php");
             const data = await resp.json();
             if (Array.isArray(data)) {
-                const eliminados = JSON.parse(localStorage.getItem('olympia_eliminados_ids') || '[]');
-                const torneosVisibles = data.filter(t => !eliminados.includes(t.id_torneo));
+                // Sincronizar baja lógica (olympia_eliminados_ids) ante un drop/reset de DB
+                const dbIds = data.map(t => parseInt(t.id_torneo));
+                const maxDbId = dbIds.length > 0 ? Math.max(...dbIds) : 0;
+                
+                let eliminados = JSON.parse(localStorage.getItem('olympia_eliminados_ids') || '[]').map(id => parseInt(id));
+                
+                // Detectar reset/drop de la DB comparando la fecha de creación del primer torneo semilla (ID = 1)
+                const torneoUno = data.find(t => parseInt(t.id_torneo) === 1);
+                const currentFingerprint = torneoUno ? (torneoUno.created_at || '') : '';
+                const savedFingerprint = localStorage.getItem('olympia_db_fingerprint') || '';
+                
+                if (currentFingerprint && currentFingerprint !== savedFingerprint) {
+                    // La base de datos se ha restablecido (nueva fecha de creación para torneo semilla)
+                    eliminados = [];
+                    localStorage.setItem('olympia_eliminados_ids', JSON.stringify([]));
+                    localStorage.setItem('olympia_db_fingerprint', currentFingerprint);
+                } else if (maxDbId <= 4) {
+                    // O si volvió al estado inicial de seeds de forma directa
+                    eliminados = [];
+                    localStorage.setItem('olympia_eliminados_ids', JSON.stringify([]));
+                    if (currentFingerprint) {
+                        localStorage.setItem('olympia_db_fingerprint', currentFingerprint);
+                    }
+                } else {
+                    // Limpiar IDs huérfanos mayores al ID máximo actual de la DB
+                    eliminados = eliminados.filter(id => id <= maxDbId);
+                    localStorage.setItem('olympia_eliminados_ids', JSON.stringify(eliminados));
+                }
+                
+                localStorage.setItem('olympia_max_seen_torneo_id', maxDbId.toString());
+
+                const torneosVisibles = data.filter(t => !eliminados.includes(parseInt(t.id_torneo)));
                 setTorneos(torneosVisibles);
             }
         } catch (error) {
@@ -63,11 +93,7 @@ const DashboardAdmin = () => {
                 </h3>
             </div>
             
-            <div className="mt-6 pt-4 border-t border-slate-800 flex justify-between items-center">
-                <span className="text-xs text-slate-500 flex items-center gap-1">
-                    <Hourglass className="h-3 w-3" />
-                    ID: {torneo.id_torneo}
-                </span>
+            <div className="mt-6 pt-4 border-t border-slate-800 flex justify-end items-center">
                 <Link to={`/admin/gestor-equipos/${torneo.id_torneo}/${encodeURIComponent(torneo.nombre_torneo)}`}>
                     <button className="text-sm font-bold text-blue-500 hover:text-blue-400 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
                         Panel de control <ArrowRight className="h-4 w-4" />

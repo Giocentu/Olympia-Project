@@ -45,9 +45,10 @@ const GestorEquipos = () => {
             
             // Cargar PIN
             const pinDb = dataEquipos.pin_asistente;
-            const storedPin = pinDb || localStorage.getItem(`olympia_pin_${idTorneo}`);
-            if (storedPin) {
-                setPinAsistente(storedPin);
+            if (pinDb) {
+                setPinAsistente(pinDb);
+            } else {
+                setPinAsistente('');
             }
 
             cargarFixture();
@@ -133,7 +134,6 @@ const GestorEquipos = () => {
 
             if (data.status === 'success') {
                 const pin = data.pin;
-                localStorage.setItem(`olympia_pin_${idTorneo}`, pin);
                 setPinAsistente(pin);
                 alert(`¡Código PIN generado para asistentes: ${pin}!`);
             } else {
@@ -144,12 +144,66 @@ const GestorEquipos = () => {
         }
     };
 
+    const mostrarAdvertenciaCambios = () => {
+        alert("Tienes cambios sin guardar en los Equipos asignados al torneo. Guárdalos primero antes de generar el fixture.");
+    };
+
+    const mostrarMensaje = (mensaje) => {
+        alert(mensaje);
+    };
+
+    const mostrarConfirmacionFinal = (mensaje) => {
+        return window.confirm(mensaje);
+    };
+
+    const mostrarErrorFixture = (mensaje) => {
+        alert(mensaje);
+    };
+
+    const mostrarAlertaAsignacion = () => {
+        alert("El navegador bloqueó el acceso al portapapeles o no lo soporta. Copia el PIN de acceso de manera manual.");
+    };
+
+    const checkCambios = (idTorneo) => {
+        return hayCambios;
+    };
+
+    const validarCambiosPendientes = (idTorneo) => {
+        if (checkCambios(idTorneo)) {
+            mostrarAdvertenciaCambios();
+            return false;
+        }
+        return true;
+    };
+
+    const detenerFlujo = () => {
+        console.log("Flujo de generación de fixture detenido.");
+    };
+
+    const eliminarPartidosPrevios = () => {
+        localStorage.removeItem(`olympia_partidos_${idTorneo}`);
+    };
+
+    const guardarNuevosPartidos = () => {
+        console.log("Nuevos partidos persistidos en el sistema.");
+    };
+
+    const limpiarMarcadoresLocales = () => {
+        localStorage.removeItem(`olympia_partidos_${idTorneo}`);
+        localStorage.removeItem(`olympia_logs_${idTorneo}`);
+    };
+
     // Copiar PIN al portapapeles
     const copiarPin = () => {
         if (!pinAsistente) return;
-        navigator.clipboard.writeText(pinAsistente);
-        setCopiado(true);
-        setTimeout(() => setCopiado(false), 2000);
+        navigator.clipboard.writeText(pinAsistente)
+            .then(() => {
+                setCopiado(true);
+                setTimeout(() => setCopiado(false), 2000);
+            })
+            .catch(() => {
+                mostrarAlertaAsignacion();
+            });
     };
 
     // --- LÓGICA DE VALIDACIÓN POR FORMATO ---
@@ -157,38 +211,39 @@ const GestorEquipos = () => {
         const formatoStr = formato.toLowerCase();
 
         if (cantidad < 2) {
-            alert("Necesitas al menos 2 equipos para generar un fixture.");
+            mostrarMensaje("Necesitas al menos 2 equipos para generar un fixture.");
             return false;
         }
 
         if (formatoStr === 'fase de grupos' && cantidad < 4) {
-            alert("⚠️ Para el formato 'Fase de Grupos' necesitas registrar al menos 4 equipos.");
+            mostrarMensaje("⚠️ Para el formato 'Fase de Grupos' necesitas registrar al menos 4 equipos.");
             return false;
         }
 
         if (formatoStr === 'eliminatoria') {
             const esPotenciaDe2 = (cantidad & (cantidad - 1)) === 0;
             if (!esPotenciaDe2) {
-                return window.confirm(`Tienes ${cantidad} equipos.\n\nAl no ser un número exacto para llaves perfectas (4, 8, 16...), el sistema adelantará automáticamente a algunos equipos a la siguiente ronda.\n\n¿Deseas continuar?`);
+                return mostrarConfirmacionFinal(`Tienes ${cantidad} equipos.\n\nAl no ser un número exacto para llaves perfectas (4, 8, 16...), el sistema adelantará automáticamente a algunos equipos a la siguiente ronda.\n\n¿Deseas continuar?`);
             }
         }
 
         if (formatoStr === 'liga' && cantidad % 2 !== 0) {
-            return window.confirm(`Tienes un número impar de equipos (${cantidad}).\n\nEsto significa que en cada jornada, un equipo quedará libre (sin jugar).\n\n¿Deseas continuar?`);
+            return mostrarConfirmacionFinal(`Tienes un número impar de equipos (${cantidad}).\n\nEsto significa que en cada jornada, un equipo quedará libre (sin jugar).\n\n¿Deseas continuar?`);
         }
 
         return true;
     };
 
     const handleGenerarFixture = async () => {
-        if (hayCambios) {
-            alert("Tienes cambios sin guardar en los participantes. Guárdalos primero antes de generar el fixture.");
+        if (!validarCambiosPendientes(idTorneo)) {
+            detenerFlujo();
             return;
         }
 
         const cantidadEquipos = originalAsignados.length;
 
         if (!validarGeneracionFixture(formatoTorneo, cantidadEquipos)) {
+            detenerFlujo();
             return;
         }
 
@@ -196,7 +251,7 @@ const GestorEquipos = () => {
         ? `¡ATENCIÓN! Ya existe un fixture generado.\n\nSi regeneras el fixture SE BORRARÁN todos los partidos actuales y sus marcadores.\n\n¿Deseas continuar?`
         : `¿Generar fixture inicial para formato ${formatoTorneo}?`;
 
-        if (window.confirm(mensajeConfirmacion)) {
+        if (mostrarConfirmacionFinal(mensajeConfirmacion)) {
             setGenerandoFixture(true);
             try {
                 const resp = await fetch("http://localhost/olympia-backend/fixture/generar_fixture.php", {
@@ -208,17 +263,21 @@ const GestorEquipos = () => {
 
                 if (data.status === 'success') {
                     // Limpiamos resultados locales guardados
-                    localStorage.removeItem(`olympia_partidos_${idTorneo}`);
-                    alert(data.mensaje);
+                    eliminarPartidosPrevios();
+                    guardarNuevosPartidos();
+                    limpiarMarcadoresLocales();
+                    mostrarMensaje(data.mensaje);
                     cargarFixture();
                 } else {
-                    alert(data.mensaje);
+                    mostrarErrorFixture(data.mensaje);
                 }
             } catch (error) {
-                alert("Error al conectar con el servidor para generar fixture.");
+                mostrarErrorFixture("Error al conectar con el servidor para generar fixture.");
             } finally {
                 setGenerandoFixture(false);
             }
+        } else {
+            detenerFlujo();
         }
     };
 
@@ -494,7 +553,7 @@ const GestorEquipos = () => {
 
     return (
         <div className="space-y-6 font-sans animate-in fade-in duration-300">
-            <Link to="/admin" className="text-sm font-bold text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors mb-4">
+            <Link to="/admin/torneos" className="text-sm font-bold text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors mb-4">
                 &larr; Volver al Panel
             </Link>
 

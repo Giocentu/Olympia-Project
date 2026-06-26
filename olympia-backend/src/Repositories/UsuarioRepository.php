@@ -7,7 +7,7 @@ use Exception;
 
 /**
  * Clase UsuarioRepository
- * Encargada de la persistencia y recuperación de datos de la entidad Usuario.
+ * Encargada de la persistencia y recuperación de datos de la entidad Usuario usando Procedimientos Almacenados.
  */
 class UsuarioRepository {
     private PDO $db;
@@ -20,9 +20,12 @@ class UsuarioRepository {
      * Busca un usuario por DNI.
      */
     public function find(int $dni_usuario): ?Usuario {
-        $stmt = $this->db->prepare("SELECT * FROM Usuario WHERE dni_usuario = :dni");
+        $stmt = $this->db->prepare("CALL sp_BuscarUsuarioPorDni(:dni)");
         $stmt->execute(['dni' => $dni_usuario]);
         $row = $stmt->fetch();
+
+        // Limpiar el buffer de PDO para poder realizar consultas posteriores
+        $stmt->closeCursor();
 
         if (!$row) {
             return null;
@@ -43,44 +46,20 @@ class UsuarioRepository {
      * Trae todos los usuarios junto con sus roles concatenados.
      */
     public function findAllWithRoles(): array {
-        $sql = "
-            SELECT U.dni_usuario, 
-                   U.nombre_usuario, 
-                   U.apellido_usuario, 
-                   U.email, 
-                   U.fecha_nac,
-                   U.telefono_usuario,
-                   COALESCE(
-                       NULLIF(
-                           CONCAT_WS(', ',
-                               (SELECT GROUP_CONCAT(DISTINCT CASE WHEN r.nombre_rol = 'Administrador' THEN 'SuperAdmin' ELSE r.nombre_rol END SEPARATOR ', ')
-                                FROM List_colaboradores lc
-                                INNER JOIN Rol r ON lc.id_rol = r.id_rol
-                                WHERE lc.dni_usuario = U.dni_usuario),
-                               (SELECT 'Capitán' 
-                                FROM Plantilla_equipo pe
-                                WHERE pe.dni_usuario = U.dni_usuario AND pe.posicion_equipo = 'Capitán'
-                                LIMIT 1)
-                           ),
-                           ''
-                       ),
-                       'Sin rol asignado'
-                   ) AS roles_asignados
-            FROM Usuario U 
-            ORDER BY U.nombre_usuario ASC
-        ";
-
-        $stmt = $this->db->query($sql);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $stmt = $this->db->query("CALL sp_ListarUsuariosConRoles()");
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $stmt->closeCursor();
+        return $rows;
     }
 
     /**
      * Busca un usuario por email.
      */
     public function findByEmail(string $email): ?Usuario {
-        $stmt = $this->db->prepare("SELECT * FROM Usuario WHERE LOWER(email) = LOWER(:email)");
+        $stmt = $this->db->prepare("CALL sp_BuscarUsuarioPorEmail(:email)");
         $stmt->execute(['email' => $email]);
         $row = $stmt->fetch();
+        $stmt->closeCursor();
 
         if (!$row) {
             return null;
@@ -101,40 +80,10 @@ class UsuarioRepository {
      * Obtiene todos los roles asignados a un usuario.
      */
     public function getUserRoles(int $dni_usuario): array {
-        // Buscar roles de colaborador
-        $stmt = $this->db->prepare("
-            SELECT DISTINCT R.nombre_rol 
-            FROM List_colaboradores LC
-            INNER JOIN Rol R ON LC.id_rol = R.id_rol
-            WHERE LC.dni_usuario = :dni
-        ");
+        $stmt = $this->db->prepare("CALL sp_ObtenerRolesUsuario(:dni)");
         $stmt->execute(['dni' => $dni_usuario]);
-        $colabRoles = $stmt->fetchAll(PDO::FETCH_COLUMN);
-
-        // Buscar si es Capitán en Plantilla_equipo
-        $stmtCap = $this->db->prepare("
-            SELECT 1 
-            FROM Plantilla_equipo 
-            WHERE dni_usuario = :dni AND posicion_equipo = 'Capitán'
-            LIMIT 1
-        ");
-        $stmtCap->execute(['dni' => $dni_usuario]);
-        $isCap = $stmtCap->fetch();
-
-        $roles = [];
-        foreach ($colabRoles as $role) {
-            if ($role === 'Administrador') {
-                $roles[] = 'SuperAdmin';
-            } elseif ($role === 'Organizador') {
-                $roles[] = 'Organizador';
-            } elseif ($role === 'Asistente') {
-                $roles[] = 'Asistente';
-            }
-        }
-
-        if ($isCap) {
-            $roles[] = 'Capitán';
-        }
+        $roles = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        $stmt->closeCursor();
 
         if (empty($roles)) {
             $roles[] = 'Capitán'; // Rol por defecto si no tiene otro
@@ -147,29 +96,8 @@ class UsuarioRepository {
      * Guarda (inserta o actualiza) un usuario.
      */
     public function save(Usuario $usuario): bool {
-        // Verificar si ya existe para hacer insert o update
-        $stmtCheck = $this->db->prepare("SELECT 1 FROM Usuario WHERE dni_usuario = :dni");
-        $stmtCheck->execute(['dni' => $usuario->dni_usuario]);
-
-        if ($stmtCheck->fetch()) {
-            $stmt = $this->db->prepare("
-                UPDATE Usuario
-                SET nombre_usuario = :nombre,
-                    apellido_usuario = :apellido,
-                    fecha_nac = :fecha_nac,
-                    email = :email,
-                    telefono_usuario = :telefono,
-                    password_hash = :pass
-                WHERE dni_usuario = :dni
-            ");
-        } else {
-            $stmt = $this->db->prepare("
-                INSERT INTO Usuario (dni_usuario, nombre_usuario, apellido_usuario, fecha_nac, email, telefono_usuario, password_hash)
-                VALUES (:dni, :nombre, :apellido, :fecha_nac, :email, :telefono, :pass)
-            ");
-        }
-
-        return $stmt->execute([
+        $stmt = $this->db->prepare("CALL sp_GuardarUsuario(:dni, :nombre, :apellido, :fecha_nac, :email, :telefono, :pass, @resultado, @mensaje)");
+        $stmt->execute([
             'dni' => $usuario->dni_usuario,
             'nombre' => $usuario->nombre_usuario,
             'apellido' => $usuario->apellido_usuario,
@@ -178,5 +106,57 @@ class UsuarioRepository {
             'telefono' => $usuario->telefono_usuario,
             'pass' => $usuario->password_hash ?? password_hash('olympia123', PASSWORD_DEFAULT)
         ]);
+        $stmt->closeCursor();
+
+        $res = $this->db->query("SELECT @resultado AS resultado, @mensaje AS mensaje")->fetch();
+        
+        if (!$res || !$res['resultado']) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Asocia un usuario a un torneo con un rol de colaborador específico.
+     */
+    public function guardarColaborador(int $dni, int $idTorneo, int $idRol): bool {
+        $stmt = $this->db->prepare("CALL sp_GuardarColaborador(:dni, :id_torneo, :id_rol, @resultado, @mensaje)");
+        $stmt->execute([
+            'dni' => $dni,
+            'id_torneo' => $idTorneo,
+            'id_rol' => $idRol
+        ]);
+        $stmt->closeCursor();
+
+        $res = $this->db->query("SELECT @resultado AS resultado, @mensaje AS mensaje")->fetch();
+        return (bool)($res['resultado'] ?? false);
+    }
+
+    /**
+     * Elimina las colaboraciones registradas de un usuario.
+     */
+    public function eliminarColaboradoresPorDni(int $dni): bool {
+        $stmt = $this->db->prepare("CALL sp_EliminarColaboradoresPorDni(:dni, @resultado, @mensaje)");
+        $stmt->execute(['dni' => $dni]);
+        $stmt->closeCursor();
+
+        $res = $this->db->query("SELECT @resultado AS resultado, @mensaje AS mensaje")->fetch();
+        return (bool)($res['resultado'] ?? false);
+    }
+
+    /**
+     * Asocia un jugador a la plantilla de un equipo.
+     */
+    public function asociarAPlantilla(int $dni, int $idEquipo): bool {
+        $stmt = $this->db->prepare("CALL sp_AsociarAPlantilla(:dni, :id_equipo, @resultado, @mensaje)");
+        $stmt->execute([
+            'dni' => $dni,
+            'id_equipo' => $idEquipo
+        ]);
+        $stmt->closeCursor();
+
+        $res = $this->db->query("SELECT @resultado AS resultado, @mensaje AS mensaje")->fetch();
+        return (bool)($res['resultado'] ?? false);
     }
 }

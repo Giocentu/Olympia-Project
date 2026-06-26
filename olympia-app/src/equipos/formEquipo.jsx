@@ -20,13 +20,24 @@ const FormEquipo = () => {
         setError('');
     };
 
+    const mostrarErrorEquipo = (mensaje) => {
+        setError(mensaje);
+    };
+
+    const validarCamposObligatorios = () => {
+        if (!formData.nombreEquipo.trim() || !formData.descripcionEquipo.trim()) {
+            mostrarErrorEquipo('Todos los campos obligatorios deben ser completados');
+            return false;
+        }
+        return true;
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
         setSuccess('');
 
-        if (!formData.nombreEquipo.trim() || !formData.descripcionEquipo.trim()) {
-            setError('Todos los campos obligatorios deben ser completados');
+        if (!validarCamposObligatorios()) {
             return;
         }
 
@@ -40,6 +51,7 @@ const FormEquipo = () => {
         };
 
         let savedLocally = false;
+        let newIdToUse = newId;
         try {
             // Guardar localmente siempre para garantizar la persistencia del prototipo
             const storedEquipos = localStorage.getItem('olympia_equipos');
@@ -67,7 +79,19 @@ const FormEquipo = () => {
             });
 
             const resultado = await response.json();
-            if (resultado.status !== "success") {
+            if (resultado.status === "success") {
+                const realId = resultado.id_equipo;
+                const stored = localStorage.getItem('olympia_equipos');
+                if (stored) {
+                    const list = JSON.parse(stored);
+                    const idx = list.findIndex(eq => eq.id === newId);
+                    if (idx !== -1) {
+                        list[idx].id = realId;
+                        localStorage.setItem('olympia_equipos', JSON.stringify(list));
+                    }
+                }
+                newIdToUse = realId;
+            } else {
                 console.warn("El backend devolvió un error, pero guardamos en localstorage para prototipo:", resultado.mensaje);
             }
         } catch (err) {
@@ -75,12 +99,12 @@ const FormEquipo = () => {
         }
 
         if (savedLocally) {
-            setSuccess('¡Equipo registrado con éxito! Redirigiendo a gestión de plantilla...');
+            setSuccess('¡Equipo registrado con éxito! Redirigiendo al menú principal...');
             setTimeout(() => {
-                navigate(`/capitan/plantilla/${newId}`);
+                navigate('/capitan');
             }, 1200);
         } else {
-            setError('Error al registrar el equipo.');
+            mostrarErrorEquipo('Error al registrar el equipo.');
         }
     };
 

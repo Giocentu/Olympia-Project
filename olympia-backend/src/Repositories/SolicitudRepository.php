@@ -7,48 +7,23 @@ use Exception;
 
 /**
  * Clase SolicitudRepository
- * Proporciona el mapeo de persistencia SQL para las solicitudes de inscripción.
- * Cuenta con auto-creación de la tabla Solicitud si no existe en la base de datos de destino.
+ * Proporciona el mapeo de persistencia SQL para las solicitudes de inscripción usando Procedimientos Almacenados.
  */
 class SolicitudRepository {
     private PDO $db;
 
     public function __construct(PDO $db) {
         $this->db = $db;
-        $this->asegurarTablaExiste();
-    }
-
-    /**
-     * Asegura la existencia de la tabla Solicitud en la base de datos MySQL.
-     */
-    private function asegurarTablaExiste(): void {
-        try {
-            $this->db->query("SELECT 1 FROM Solicitud LIMIT 1");
-        } catch (\PDOException $e) {
-            // Si arroja excepción, significa que la tabla no existe en db_olympia
-            $sql = "
-                CREATE TABLE IF NOT EXISTS Solicitud (
-                    id_solicitud VARCHAR(50) NOT NULL,
-                    id_torneo INT NOT NULL,
-                    id_equipo INT NOT NULL,
-                    estado_solicitud VARCHAR(20) NOT NULL DEFAULT 'Pendiente',
-                    fecha_solicitud DATE NOT NULL,
-                    PRIMARY KEY (id_solicitud),
-                    FOREIGN KEY (id_torneo) REFERENCES Torneo(id_torneo) ON DELETE CASCADE,
-                    FOREIGN KEY (id_equipo) REFERENCES Equipo(id_equipo) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-            ";
-            $this->db->exec($sql);
-        }
     }
 
     /**
      * Busca una solicitud por su ID.
      */
     public function find(string $id_solicitud): ?Solicitud {
-        $stmt = $this->db->prepare("SELECT * FROM Solicitud WHERE id_solicitud = :id");
+        $stmt = $this->db->prepare("CALL sp_BuscarSolicitudPorId(:id)");
         $stmt->execute(['id' => $id_solicitud]);
         $row = $stmt->fetch();
+        $stmt->closeCursor();
 
         if (!$row) {
             return null;
@@ -67,18 +42,12 @@ class SolicitudRepository {
      * Recupera todas las solicitudes del sistema con información de equipo y torneo.
      */
     public function findAll(): array {
-        $stmt = $this->db->query("
-            SELECT s.*, t.nombre_torneo, e.nombre_equipo, dep.nombre_deporte AS deporte_torneo
-            FROM Solicitud s
-            INNER JOIN Torneo t ON s.id_torneo = t.id_torneo
-            INNER JOIN Equipo e ON s.id_equipo = e.id_equipo
-            INNER JOIN Disciplina d ON t.id_disciplina = d.id_disciplina
-            INNER JOIN Deporte dep ON d.id_deporte = dep.id_deporte
-            ORDER BY s.fecha_solicitud DESC
-        ");
-        
+        $stmt = $this->db->query("CALL sp_ListarSolicitudes()");
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $stmt->closeCursor();
+
         $solicitudes = [];
-        while ($row = $stmt->fetch()) {
+        foreach ($rows as $row) {
             $sol = new Solicitud(
                 (int)$row['id_torneo'],
                 (int)$row['id_equipo'],
@@ -103,77 +72,61 @@ class SolicitudRepository {
             $solicitud->id_solicitud = 'sol_' . round(microtime(true) * 1000);
         }
 
-        // Verificar si ya existe para hacer insert o update
-        $stmtCheck = $this->db->prepare("SELECT 1 FROM Solicitud WHERE id_solicitud = :id");
-        $stmtCheck->execute(['id' => $solicitud->id_solicitud]);
-        
-        if ($stmtCheck->fetch()) {
-            $stmt = $this->db->prepare("
-                UPDATE Solicitud
-                SET id_torneo = :id_torneo,
-                    id_equipo = :id_equipo,
-                    estado_solicitud = :estado,
-                    fecha_solicitud = :fecha
-                WHERE id_solicitud = :id
-            ");
-        } else {
-            $stmt = $this->db->prepare("
-                INSERT INTO Solicitud (id_solicitud, id_torneo, id_equipo, estado_solicitud, fecha_solicitud)
-                VALUES (:id, :id_torneo, :id_equipo, :estado, :fecha)
-            ");
-        }
-
-        return $stmt->execute([
+        $stmt = $this->db->prepare("CALL sp_GuardarSolicitud(:id, :id_torneo, :id_equipo, :estado, :fecha, @resultado, @mensaje)");
+        $stmt->execute([
             'id' => $solicitud->id_solicitud,
             'id_torneo' => $solicitud->id_torneo,
             'id_equipo' => $solicitud->id_equipo,
             'estado' => $solicitud->estado_solicitud,
             'fecha' => $solicitud->fecha_solicitud
         ]);
+        $stmt->closeCursor();
+
+        $res = $this->db->query("SELECT @resultado AS resultado, @mensaje AS mensaje")->fetch();
+        return (bool)($res['resultado'] ?? false);
     }
 
     /**
      * Actualiza el estado de una solicitud.
      */
     public function updateEstado(string $id_solicitud, string $estado): bool {
-        $stmt = $this->db->prepare("UPDATE Solicitud SET estado_solicitud = :estado WHERE id_solicitud = :id");
-        return $stmt->execute([
+        $stmt = $this->db->prepare("CALL sp_ActualizarEstadoSolicitud(:id, :estado, @resultado, @mensaje)");
+        $stmt->execute([
             'id' => $id_solicitud,
             'estado' => $estado
         ]);
+        $stmt->closeCursor();
+
+        $res = $this->db->query("SELECT @resultado AS resultado, @mensaje AS mensaje")->fetch();
+        return (bool)($res['resultado'] ?? false);
     }
 
     /**
      * Verifica si ya existe una solicitud activa (Pendiente o Aprobada) para el binomio equipo/torneo.
      */
     public function checkDuplicada(int $id_equipo, int $id_torneo): bool {
-        $stmt = $this->db->prepare("
-            SELECT 1 FROM Solicitud 
-            WHERE id_equipo = :id_equipo AND id_torneo = :id_torneo AND estado_solicitud IN ('Pendiente', 'Aprobado')
-        ");
-        $stmt->execute(['id_equipo' => $id_equipo, 'id_torneo' => $id_torneo]);
-        return (bool)$stmt->fetch();
+        $stmt = $this->db->prepare("CALL sp_CheckSolicitudDuplicada(:id_equipo, :id_torneo, @duplicado)");
+        $stmt->execute([
+            'id_equipo' => $id_equipo,
+            'id_torneo' => $id_torneo
+        ]);
+        $stmt->closeCursor();
+
+        $res = $this->db->query("SELECT @duplicado AS duplicado")->fetch();
+        return (bool)($res['duplicado'] ?? false);
     }
 
     /**
      * Recupera las solicitudes de inscripción para los torneos a los que un organizador está asignado.
      */
     public function findAllByOrganizador(int $dni_organizador): array {
-        $stmt = $this->db->prepare("
-            SELECT s.*, t.nombre_torneo, e.nombre_equipo, dep.nombre_deporte AS deporte_torneo
-            FROM Solicitud s
-            INNER JOIN Torneo t ON s.id_torneo = t.id_torneo
-            INNER JOIN Equipo e ON s.id_equipo = e.id_equipo
-            INNER JOIN Disciplina d ON t.id_disciplina = d.id_disciplina
-            INNER JOIN Deporte dep ON d.id_deporte = dep.id_deporte
-            INNER JOIN List_colaboradores LC ON t.id_torneo = LC.id_torneo
-            WHERE LC.dni_usuario = :dni AND LC.id_rol = 2 -- Rol Organizador
-            ORDER BY s.fecha_solicitud DESC
-        ");
+        $stmt = $this->db->prepare("CALL sp_ListarSolicitudesPorOrganizador(:dni)");
         $stmt->execute(['dni' => $dni_organizador]);
-        
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $stmt->closeCursor();
+
         $solicitudes = [];
-        while ($row = $stmt->fetch()) {
+        foreach ($rows as $row) {
             $sol = new Solicitud(
                 (int)$row['id_torneo'],
                 (int)$row['id_equipo'],
